@@ -1,0 +1,277 @@
+import http.client, urllib.parse
+import copy
+import xml.etree.ElementTree as ET
+import collections
+import math
+import csv
+import datetime
+import time
+import threading
+import smtplib
+from email.mime.text import MIMEText
+import socket
+import sys
+import json
+
+
+
+
+sys.setrecursionlimit(99999999)
+
+
+
+def datecov2(date):
+    date=str(date)
+    return date[0:4]+date[5:7]+date[8:10]
+
+headers={
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'ApplicationName' : 'FlyCapital Forex.com FX trading software'
+}
+
+
+class XmlListConfig(list):
+    def __init__(self, aList):
+        for element in aList:
+            if len(element)!=0:
+                # treat like dict
+                if len(element) == 1 or element[0].tag != element[1].tag:
+                    self.append(XmlDictConfig(element))
+                # treat like list
+                elif element[0].tag == element[1].tag:
+                    self.append(XmlListConfig(element))
+            elif element.text:
+                text = element.text.strip()
+                if text:
+                    self.append(text)
+
+class XmlDictConfig(dict):
+
+    def __init__(self, parent_element):
+        if parent_element.items():
+            self.update(dict(parent_element.items()))
+        for element in parent_element:
+            if len(element)!=0:
+                # treat like dict - we assume that if the first two tags
+                # in a series are different, then they are all different.
+                if len(element) == 1 or element[0].tag != element[1].tag:
+                    aDict = XmlDictConfig(element)
+                # treat like list - we assume that if the first two tags
+                # in a series are the same, then the rest are the same.
+                else:
+                    # here, we put the list in dictionary; the key is the
+                    # tag name the list elements all share in common, and
+                    # the value is the list itself
+                    aDict = {element[0].tag: XmlListConfig(element)}
+                # if the tag has attributes, add those to the dict
+                if element.items():
+                    aDict.update(dict(element.items()))
+                self.update({element.tag: aDict})
+            # this assumes that if you've got an attribute in a tag,
+            # you won't be having any text. This may or may not be a
+            # good idea -- time will tell. It works for the way we are
+            # currently doing XML configuration files...
+            elif element.items():
+                self.update({element.tag: dict(element.items())})
+            # finally, if there are no child tags and no attributes, extract
+            # the text
+            else:
+                self.update({element.tag: element.text})
+
+
+def xml2dict(resp_xml_str):
+
+    pfx=["""xmlns="www.GainCapital.com.WebServices" """, """xmlns="www.GainCapital.com.WebServices/" """]
+
+    for p in pfx:
+        p_tmp=p.replace(" ","")
+        resp_xml_str=resp_xml_str.replace(p_tmp,'')
+
+    resp_xml_str=resp_xml_str.replace('\\r\\n','').replace('b\'','').replace('\'','')
+    #print (resp_xml_str) #for debug
+    root=ET.fromstring(resp_xml_str)
+    xmldict = XmlDictConfig(root)
+    return xmldict
+
+class forexcom:
+
+    def __init__(self, set_obj):
+
+        self.broker_name='Forex '
+        self.token=None
+        self.set_obj=set_obj
+        self.latest_quotes={}
+        self.ccy_dict={}
+        self.show_live_stream=False
+
+        # connect
+        self.connect()
+
+    def connect(self):
+
+        try:
+
+            req=urllib.parse.urlencode({'userID': self.set_obj.get_account_id(),'password':self.set_obj.get_account_pwd()})
+
+            conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+            conn.request('POST', '/gaincapitalwebservices/authenticate/authenticationservice.asmx/AuthenticateCredentials', req, headers)
+            resp = str(conn.getresponse().read())
+
+            resp_dict=xml2dict(resp)
+
+            if resp_dict['success']=='true':
+                print (self.broker_name+'connection succeeded...')
+                self.token=resp_dict['token']
+
+                req=urllib.parse.urlencode({'Token': self.token})
+
+                conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+                conn.request('POST', '/GainCapitalWebServices/Configuration/ConfigurationService.asmx/GetConfigurationSettings', req, headers)
+                resp = str(conn.getresponse().read())
+                resp_dict=xml2dict(resp)
+
+                if resp_dict['Success']=='true':
+
+                    self.rates_conn_info = resp_dict['RatesConnection']['Connection'][0] #take the first IP and Port
+
+                else:
+                    print (self.broker_name+'unable to get configuration settings...')
+                    return None
+            else:
+                print (self.broker_name+'connection failed...')
+                time.sleep(5)
+                self.connect()
+        except Exception as error:
+
+            print (self.broker_name+'connection failed...')
+            print (error)
+            time.sleep(5)
+            self.connect()
+
+
+    def live_stream(self):
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((self.rates_conn_info['IP'], int(self.rates_conn_info['Port'])))
+        s.sendall(bytes(self.token, 'utf-8'))
+
+        is_head=True
+        is_table=False
+        data_str=''
+        while 1:
+            data_tmp=s.recv(1024).decode("utf-8")
+            if is_head==True and ("$" in data_tmp)==True:
+                data_str+=data_tmp
+            else:
+                is_head=False
+                if is_table==False:
+                    data_list=data_str.split('$')
+
+                    for ccy_str in data_list:
+                        ccy_list=ccy_str.split('\\')
+                        if ccy_list[0]!='\r' and ccy_list[1]!='XAU/USD' and ccy_list[1]!='XAG/USD' and ccy_list[1]!='USD/RUB':
+                            self.ccy_dict['R'+ccy_list[0].replace('S','')]=ccy_list[1]
+                            self.latest_quotes[ccy_list[1]]={'bid':float(ccy_list[2]),'ask':float(ccy_list[3])}
+                    is_table=True
+                #
+                if self.show_live_stream==True:
+                    print (self.broker_name+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), data_tmp)
+                try:
+                    ccy_list_tmp=data_tmp.split('\r')
+                    for ccy in ccy_list_tmp:
+                        ccy_live_list=ccy.split('\\')
+                        self.latest_quotes[self.ccy_dict[ccy_live_list[0]]]={'bid':float(ccy_live_list[1]), 'ask':float(ccy_live_list[2])}
+                except:
+                    None
+
+                #self.latest_quotes=data_tmp
+
+    def start_live_stream(self):
+        print (self.broker_name+'start steaming...')
+        threading.Thread(target = self.live_stream).start()
+
+    def get_ccy_list(self):
+        return self.ccy_dict.values()
+
+    def get_latest_quotes(self, ccy):
+
+        #print self.broker_name+'latest quotes',ccy, self.latest_quotes[ccy], datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return self.latest_quotes[ccy]
+
+    def make_mkt_order(self, ccy, amount, side):
+        req=urllib.parse.urlencode({'Token': self.token,
+                            'Product': ccy,
+                            'BuySell':side,
+                            'Amount': amount})
+
+        conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx/DealRequestAtBest', req, headers)
+        resp = str(conn.getresponse().read())
+        resp_dict=xml2dict(resp)
+
+        return float(resp_dict['rate'])
+
+
+    def make_limit_order(self, ccy, amount, side, prc):
+        req=urllib.parse.urlencode({'Token': self.token,
+                    'Product': ccy,
+                    'BuySell':side,
+                    'Amount': amount,
+                    'Rate': prc})
+
+        conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx/DealRequest', req, headers)
+        resp = str(conn.getresponse().read())
+        resp_dict=xml2dict(resp)
+
+        if resp_dict['success']=='true':
+            return float(resp_dict['rate'])
+        else:
+            return -1
+
+    def close_position(self, ccy):
+        req=urllib.parse.urlencode({'Token': self.token,
+                  'Product': ccy})
+
+        conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx/ClosePosition', req, headers)
+        resp = str(conn.getresponse().read())
+        resp_dict=xml2dict(resp)
+
+        return float(resp_dict['rate'])
+
+    def get_position(self, ccy):
+        req=urllib.parse.urlencode({'Token': self.token,
+                          'Product': ccy})
+
+        conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx/GetPositionBlotterWithFilter', req, headers)
+        resp = str(conn.getresponse().read())
+        resp_dict=xml2dict(resp)
+
+        if resp_dict['Success']=='true':
+            try:
+                position=int(resp_dict['Output']['Position']['Contract'])
+                if position!=0:
+                    position_dict={}
+
+                    position_dict['units']=abs(position)
+                    if position>0:
+                        position_dict['side']='buy'
+                    else:
+                        position_dict['side']='sell'
+
+                    return position_dict
+
+                else:
+                    return {'side':'buy','units':0}
+            except:
+                return {'side':'buy','units':'N/A'} #cannot get contract info
+        else:
+            print ('invalid product...')
+
+
+
+
+
+
