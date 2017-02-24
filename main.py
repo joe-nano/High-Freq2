@@ -1,7 +1,7 @@
 import threading
 import sys
 import time
-from ht import *
+from hft import *
 from datetime import datetime
 
 
@@ -9,8 +9,6 @@ def main(args):
 
     weekday=datetime.today().weekday()
     now=datetime.now()
-
-    num_oppo=0
 
     if False: #(int(weekday)==4 and int(now.hour)>=17) or int(weekday)==5 or (int(weekday)==6 and int(now.hour)<17): #Friday 5pm - Sunday 5pm
 
@@ -25,11 +23,24 @@ def main(args):
 
         #start trading
 
-        ht_obj=ht(set_obj)
+        ccy_list=['USD_JPY','USD_DKK', 'EUR_USD']
 
-        ht_obj.start_live_stream()
+        hft_list=[]
 
-        ht_obj.start_trading()
+        for ccy in ccy_list:
+            hft_list.append(hft(ccy, set_obj))
+
+
+        threads=[]
+
+        for hft_obj in hft_list:
+            threads.append(threading.Thread(target=hft_obj.start(),args=None))
+
+        for thread in threads:
+            thread.start()
+
+        for thread in threads:
+            thread.join()
 
 
 if __name__=='__main__':

@@ -11,17 +11,13 @@ login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_ht.csv'
 #position_dir='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/test/option_position_test.csv'
 #login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/test/login_file_test.csv'
 
-ccy='USD/JPY'
+ccy='USD_JPY'
 
 set_obj=set(login_file)
 
 #start trading
 
-broker1=forexcom(set_obj)
-broker2=Oanda(set_obj)
-
-
-print (broker2.get_position('EUR_JPY'))
+hft_obj=hft(ccy, set_obj)
 '''
 ccy_list=broker1.get_ccy_list()
 

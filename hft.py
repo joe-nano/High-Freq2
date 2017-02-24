@@ -1,0 +1,432 @@
+from forexcom import *
+from Oanda import *
+import http.client, urllib.parse
+import copy
+import xml.etree.ElementTree as ET
+import collections
+import math
+import csv
+import datetime
+import time
+import threading
+import smtplib
+from email.mime.text import MIMEText
+import socket
+import sys
+import json
+import oandapyV20
+from oandapyV20 import API
+import oandapyV20.endpoints.orders as orders
+import oandapyV20.endpoints.pricing as pricing
+import oandapyV20.endpoints.positions as positions
+import json
+import time
+import threading
+import datetime
+import ast
+
+# Forex.com currency pair code
+ccy_dict={'R20': 'EUR/DKK',
+          'R17': 'NZD/USD',
+          'R47': 'USD/ZAR',
+          'R29': 'CHF/JPY',
+          'R13': 'USD/CHF',
+          'R30': 'EUR/NZD',
+          'R25': 'GBP/CAD',
+          'R107': 'USD/CNH',
+          'R68': 'USD/TRY',
+          'R67': 'EUR/PLN',
+          'R36': 'CAD/CHF',
+          'R23': 'USD/HKD',
+          'R26': 'GBP/CHF',
+          'R71': 'EUR/HUF',
+          'R70': 'USD/HUF',
+          'R22': 'AUD/CAD',
+          'R15': 'AUD/JPY',
+          'R39': 'NZD/CAD',
+          'R72': 'USD/CZK',
+          'R73': 'EUR/CZK',
+          'R32': 'USD/NOK',
+          'R21': 'CAD/JPY',
+          'R34': 'USD/SGD',
+          'R10': 'EUR/CHF',
+          'R3': 'USD/JPY',
+          'R69': 'EUR/TRY',
+          'R19': 'EUR/AUD',
+          'R35': 'AUD/CHF',
+          'R2': 'GBP/USD',
+          'R24': 'AUD/NZD',
+          'R8': 'AUD/USD',
+          'R14': 'GBP/AUD',
+          'R9': 'GBP/JPY',
+          'R66': 'USD/PLN',
+          'R31': 'GBP/NZD',
+          'R40': 'NZD/CHF',
+          'R43': 'SGD/JPY',
+          'R16': 'EUR/CAD',
+          'R46': 'USD/MXN',
+          'R11': 'USD/CAD',
+          'R33': 'USD/SEK',
+          'R12': 'EUR/GBP',
+          'R27': 'NZD/JPY',
+          'R5': 'EUR/JPY',
+          'R18': 'USD/DKK',
+          'R1': 'EUR/USD',
+          'R74': 'ZAR/JPY',
+          'R37': 'EUR/NOK',
+          'R38': 'EUR/SEK'}
+
+def get_boundary(ccy):
+
+    if ('JPY' in ccy)==True:
+        lb=0.005
+        ub=0.1
+    else:
+        lb=0.0001
+        ub=0.1
+
+    return (lb, ub)
+
+def f2o(ccy):
+
+    ccy_pair=ccy.split('/')
+    return ccy_pair[0]+'_'+ccy_pair[1]
+
+
+def o2f(ccy):
+    ccy_pair=ccy.split('_')
+    return ccy_pair[0]+'/'+ccy_pair[1]
+
+
+class hft:
+
+
+    def __init__(self, ccy, set_obj):
+
+        self.broker1=forexcom(o2f(ccy), set_obj)
+        self.broker2=Oanda(ccy, set_obj)
+
+        self.ccy=ccy #in XXX_YYY format
+        self.set_obj=set_obj
+        self.locker=threading.Lock()
+        self.is_open=None
+        self.open_type=''
+        self.check_position() #initialize is_open flag/open type
+        self.bd=get_boundary(self.ccy)
+        self.last_quote1={'ask':-999999,'bid':-999999}
+        self.last_quote2={'ask':-999999,'bid':-999999}
+
+
+        self.num_oppo=0
+        self.spread_open=0
+        self.spread_open_act=0
+
+        self.amount=5000
+
+
+
+    def trading(self, broker):
+
+
+        if broker=='Forexcom':
+
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((self.broker1.rates_conn_info['IP'], int(self.broker1.rates_conn_info['Port'])))
+            s.sendall(bytes(self.broker1.token, 'utf-8'))
+
+
+            while 1:
+                data_tmp=s.recv(1024).decode("utf-8")
+
+                try:
+                    ccy_list_tmp=data_tmp.split('\r')
+                    for ccy in ccy_list_tmp:
+                        ccy_live_list=ccy.split('\\')
+                        if ccy_live_list[0]!='': #not heart beat
+                            self.last_quote1['bid']=float(ccy_live_list[1])
+                            self.last_quote1['ask']=float(ccy_live_list[2])
+
+                            if ccy_dict[ccy_live_list[0]]==o2f(self.ccy):
+                                self.locker.acquire(True)
+                                self.execute()
+                                self.locker.release()
+
+                    #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), data_tmp)
+
+                except:
+                    None
+
+        elif broker=='Oanda':
+
+            params ={
+                "instruments": self.broker2.ccy
+
+            }
+
+            req = pricing.PricingStream(accountID=self.broker2.account_id, params=params)
+            resp_stream = self.broker2.client.request(req)
+            for ticks in resp_stream:
+                if ticks['type']!='HEARTBEAT':
+
+                    #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
+
+                    self.last_quote2['bid']=float(ticks['bids'][0]['price'])
+                    self.last_quote2['ask']=float(ticks['asks'][0]['price'])
+
+                    self.locker.acquire(True)
+                    self.execute()
+                    self.locker.release()
+
+        else:
+
+            print ('unknwon broker...')
+            return None
+
+    def start(self):
+        try:
+            print (self.ccy+' started...')
+            threads=[]
+            threads.append(threading.Thread(target=self.trading,args=['Forexcom']))
+            threads.append(threading.Thread(target=self.trading,args=['Oanda']))
+
+            for thread in threads:
+                thread.start()
+            '''
+            for thread in threads:
+                thread.join()
+            '''
+        except Exception as error:
+            print (self.ccy, 'error encounter in trading, restarting...')
+            time.sleep(5)
+            self.start()
+
+
+    def check_position(self):
+
+        #check current open position:
+        if self.broker1.get_position()['units']!=0 and self.broker2.get_position()['units']!=0: #both account has open position
+            self.is_open=True
+            if self.broker1.get_position()['side']=='buy' and self.broker2.get_position()['side']=='sell':
+                self.open_type='1a2b'
+            elif self.broker1.get_position()['side']=='sell' and self.broker2.get_position()['side']=='buy':
+                self.open_type='1b2a'
+        elif self.broker1.get_position()['units']==0 and self.broker2.get_position()['units']==0: #both account has no open position
+            self.is_open=False
+        else: #one account has open position
+            if self.broker1.get_position()['units']!=0:
+                self.broker1.close_position()
+            elif self.broker2.get_position()['units']!=0:
+                self.broker2.close_position()
+
+            self.is_open=False
+
+
+    def execute(self):
+        #threshold=0.33
+        try:
+
+            if self.is_open==False: #does not have open position
+                #ask=buy, bid=sell
+                if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1]:
+
+                    fill_price_buy=self.broker1.make_limit_order(self.amount, 'B', self.last_quote1['ask'])
+                    if fill_price_buy>0:
+                        fill_price_sell=self.broker2.make_mkt_order(self.amount, 'sell')
+
+
+                        self.spread_open_act=fill_price_sell-fill_price_buy
+
+                        if self.spread_open_act<=0:
+                            fill_price_sell_c=self.broker1.close_position()
+                            fill_price_buy_c=self.broker2.make_mkt_order(self.amount, 'buy')
+
+                            self.locker.acquire(True)
+                            print (self.ccy, 'open with negative spread, position closed...')
+                            print ('actual profit: '+str(self.spread_open_act-(fill_price_buy_c-fill_price_sell_c)))
+                            print (self.last_quote1)
+                            print (self.last_quote2)
+                            print ('filled price: ', {'buy1': fill_price_buy, 'sell2':fill_price_sell})
+                            print ('------------------------------------------------------------')
+                            self.locker.release()
+                        else:
+                            self.num_oppo+=1
+                            self.is_open=True
+                            self.open_type='1a2b'
+                            self.spread_open=self.last_quote2['bid']-self.last_quote1['ask']
+
+                            self.locker.acquire(True)
+                            print (self.ccy, 'open position: 1a<2b')
+                            print ('target open spread: '+str(self.spread_open))
+                            print ('actual open spread: '+str(self.spread_open_act))
+                            print (self.last_quote1)
+                            print (self.last_quote2)
+                            print ('filled price: ', {'buy1': fill_price_buy, 'sell2':fill_price_sell})
+                            print ('current total opportunity: '+str(self.num_oppo))
+                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                            print ('------------------------------------------------------------')
+                            self.locker.release()
+                            #time.sleep(10)
+                elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1]:
+
+                    fill_price_sell=self.broker1.make_limit_order(self.amount, 'S', self.last_quote1['bid'])
+                    if fill_price_sell>0:
+                        fill_price_buy=self.broker2.make_mkt_order(self.amount, 'buy')
+
+                        self.spread_open_act=fill_price_sell-fill_price_buy
+
+                        if self.spread_open_act<=0:
+                            fill_price_buy_c=self.broker1.close_position()
+                            fill_price_sell_c=self.broker2.make_mkt_order(self.amount, 'sell')
+
+                            self.locker.acquire(True)
+                            print (self.ccy, 'open with negative spread, position closed...')
+                            print ('actual profit: '+str(self.spread_open_act-(fill_price_buy_c-fill_price_sell_c)))
+                            print (self.last_quote1)
+                            print (self.last_quote2)
+                            print ('filled price: ', {'buy2': fill_price_buy, 'sell1':fill_price_sell})
+                            print ('------------------------------------------------------------')
+                            self.locker.release()
+                        else:
+                            self.open_type='2a1b'
+                            self.is_open=True
+                            self.num_oppo+=1
+                            self.spread_open=self.last_quote1['bid']-self.last_quote2['ask']
+
+                            self.locker.acquire(True)
+                            print (self.ccy, 'open position: 2a<1b')
+                            print ('target open spread: '+str(self.spread_open))
+                            print ('actual open spread: '+str(self.spread_open_act))
+                            print (self.last_quote1)
+                            print (self.last_quote2)
+                            print ('filled price: ', {'buy2': fill_price_buy, 'sell1':fill_price_sell})
+                            print ('current total opportunity: '+str(self.num_oppo))
+                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                            print ('------------------------------------------------------------')
+                            self.locker.release()
+                            #time.sleep(10)
+            else: #has open position
+
+                if self.open_type=='1a2b':
+
+                    spread_close=-(self.last_quote1['bid']-self.last_quote2['ask'])
+                    #if spread_close<self.spread_open_act[ccy]*threshold:
+                    if spread_close< -self.bd[0] and spread_close> -self.bd[1]:
+
+                        fill_price_sell=self.broker1.make_limit_order(self.amount, 'S', self.last_quote1['bid'])
+                        if fill_price_sell>0:
+                            fill_price_buy=self.broker2.make_mkt_order(self.amount, 'buy')
+
+                            self.is_open=False
+                            self.locker.acquire(True)
+                            print (self.ccy, 'close position...')
+                            print ('target close spread: '+str(spread_close))
+                            print ('actual close spread: '+str(fill_price_buy-fill_price_sell))
+                            print ('target profit: '+str(self.spread_open-spread_close))
+                            print ('actual profit: '+str(self.spread_open_act-(fill_price_buy-fill_price_sell)))
+                            print (self.last_quote1)
+                            print (self.last_quote2)
+                            print ('filled price: ', {'buy2': fill_price_buy, 'sell1':fill_price_sell})
+                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                            print ('------------------------------------------------------------')
+                            self.locker.release()
+
+                elif self.open_type=='2a1b':
+
+                    spread_close=-(self.last_quote1['ask']-self.last_quote2['bid'])
+                    #if spread_close<self.spread_open_act[ccy]*threshold:
+                    if spread_close< -self.bd[0] and spread_close> -self.bd[1]:
+
+                        fill_price_buy=self.broker1.make_limit_order(self.amount, 'B', self.last_quote1['ask'])
+                        if fill_price_buy>0:
+                            fill_price_sell=self.broker2.make_mkt_order(self.amount, 'sell')
+
+                            self.is_open=False
+                            self.locker.acquire(True)
+                            print (self.ccy, 'close position...')
+                            print ('target close spread: '+str(spread_close))
+                            print ('actual close spread: '+str(fill_price_buy-fill_price_sell))
+                            print ('target profit: '+str(self.spread_open-spread_close))
+                            print ('actual profit: '+str(self.spread_open_act-(fill_price_buy-fill_price_sell)))
+                            print (self.last_quote1)
+                            print (self.last_quote2)
+                            print ('filled price: ', {'buy1': fill_price_buy, 'sell2':fill_price_sell})
+                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                            print ('------------------------------------------------------------')
+                            self.locker.release()
+                else:
+
+                    print ('unknown open type...')
+
+
+        except Exception as error:
+            print (self.ccy, 'error encountered, trading not executed '+str(error))
+
+
+
+class set:
+    def __init__(self, login_file):
+
+        file = open(login_file, 'r')
+        i=1
+        try:
+            reader = csv.reader(file)
+            for row in reader:
+                if i==1:
+                    self.account_id=row[0]
+                elif i==2:
+                    self.account_pwd=row[0]
+                elif i==3:
+                    self.email_login=row[0]
+                elif i==4:
+                    self.email_pwd=row[0]
+                elif i==5:
+                    self.account_num=row[0]
+                elif i==6:
+                    self.account_token=row[0]
+                i+=1
+
+        finally:
+            file.close()
+
+    def get_account_num(self):
+        return self.account_num
+
+    def get_account_token(self):
+        return self.account_token
+
+    def get_account_id(self):
+        return str(self.account_id)
+
+    def get_account_pwd(self):
+        return str(self.account_pwd)
+
+    def get_email_login(self):
+        return str(self.email_login)
+
+    def get_email_pwd(self):
+        return str(self.email_pwd)
+
+
+def send_hotmail(subject, content, set_obj):
+    msg_txt=format_email_dict(content)
+    from_email={'login': set_obj.get_email_login(), 'pwd': set_obj.get_email_pwd()}
+    to_email='finatos@me.com'
+
+    msg=MIMEText(msg_txt)
+    msg['Subject'] = subject
+    msg['From'] = from_email['login']
+    msg['To'] = to_email
+    mail=smtplib.SMTP('smtp.live.com',25)
+    mail.ehlo()
+    mail.starttls()
+    mail.login(from_email['login'], from_email['pwd'])
+    mail.sendmail(from_email['login'], to_email, msg.as_string())
+    mail.close()
+
+
+def format_email_dict(content):
+    content_tmp=''
+    for item in content.keys():
+        content_tmp+=str(item)+':'+str(content[item])+'\r\n'
+    return content_tmp
+

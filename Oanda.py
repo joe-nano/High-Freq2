@@ -10,24 +10,17 @@ import datetime
 import ast
 
 
-def f2o(ccy):
-
-    ccy_pair=ccy.split('/')
-    return ccy_pair[0]+'_'+ccy_pair[1]
-
-
 class Oanda:
 
 
-    def __init__(self, set_obj):
+    def __init__(self, ccy, set_obj):
 
         self.broker_name='Oanda '
         self.client=None
         self.set_obj=set_obj
-        self.ccy_list=None
+        self.ccy=ccy
         self.connect()
         self.latest_quotes={}
-        self.show_live_stream=False
 
     def connect(self):
         try:
@@ -45,7 +38,7 @@ class Oanda:
     def live_stream(self):
 
         params ={
-            "instruments": ','.join(self.ccy_list)
+            "instruments": self.ccy
 
         }
 
@@ -53,30 +46,19 @@ class Oanda:
         resp_stream = self.client.request(req)
         for ticks in resp_stream:
             if ticks['type']!='HEARTBEAT':
-                if self.show_live_stream==True:
-                    print (self.broker_name+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
-
+                #print (self.broker_name+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
                 self.latest_quotes[ticks['instrument']]={'bid':float(ticks['bids'][0]['price']), 'ask':float(ticks['asks'][0]['price'])}
 
 
-    def start_live_stream(self):
-        print (self.broker_name+'start steaming...')
-        threading.Thread(target = self.live_stream).start()
 
-    def get_latest_quotes(self, ccy):
-
-        #print (self.broker_name+'latest quotes',ccy, self.latest_quotes[ccy], datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        return self.latest_quotes[ccy]
-
-
-    def make_mkt_order(self, ccy, amount, side):
+    def make_mkt_order(self, amount, side):
 
         order=None
         if side=='buy':
 
             order={
                 "order": {
-                "instrument": ccy,
+                "instrument": self.ccy,
                 "units": str(amount),
                 "type": "MARKET",
                 "positionFill": "DEFAULT"
@@ -88,7 +70,7 @@ class Oanda:
 
             order={
                 "order": {
-                "instrument": ccy,
+                "instrument": self.ccy,
                 "units": str(-amount),
                 "type": "MARKET",
                 "positionFill": "DEFAULT"
@@ -107,11 +89,11 @@ class Oanda:
 
 
 
-    def close_position(self, ccy):
+    def close_position(self):
         try:
 
             data ={'longUnits':'ALL'}
-            order_close=positions.PositionClose(accountID=self.account_id,instrument=ccy,data=data)
+            order_close=positions.PositionClose(accountID=self.account_id,instrument=self.ccy,data=data)
 
             self.client.request(order_close)
             resp_close=order_close.response
@@ -121,7 +103,7 @@ class Oanda:
 
             if ('does not exist' in str(err))==True:
                 data ={'shortUnits':'ALL'}
-                order_close=positions.PositionClose(accountID=self.account_id,instrument=ccy,data=data)
+                order_close=positions.PositionClose(accountID=self.account_id,instrument=self.ccy,data=data)
 
                 self.client.request(order_close)
                 resp_close=order_close.response
@@ -129,7 +111,7 @@ class Oanda:
             else:
                 print ("order not executed "+str(err))
 
-    def get_position(self, ccy):
+    def get_position(self):
 
 
         req_position = positions.OpenPositions(accountID=self.account_id)
@@ -138,7 +120,6 @@ class Oanda:
 
         resp_position=req_position.response
 
-        print (resp_position)
         if resp_position['positions']==[]:
 
             return {'side':'buy','units':0}
@@ -147,7 +128,7 @@ class Oanda:
             in_position_list=False
             for pos in resp_position['positions']:
 
-                if pos['instrument']==ccy:
+                if pos['instrument']==self.ccy:
                     in_position_list=True
                     net_position=int(pos['short']['units'])+int(pos['long']['units'])
 
