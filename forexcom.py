@@ -168,7 +168,7 @@ class forexcom:
             resp_dict=xml2dict(resp)
 
             if resp_dict['success']=='true':
-                print (self.broker_name+'connection succeeded...')
+                print (self.broker_name+self.ccy+' '+'connection succeeded...')
                 self.token=resp_dict['token']
 
                 req=urllib.parse.urlencode({'Token': self.token})
@@ -186,12 +186,12 @@ class forexcom:
                     print (self.broker_name+'unable to get configuration settings...')
                     return None
             else:
-                print (self.broker_name+'connection failed...')
+                print (self.broker_name+self.ccy+' '+'connection failed...')
                 time.sleep(5)
                 self.connect()
         except Exception as error:
 
-            print (self.broker_name+'connection failed...')
+            print (self.broker_name+self.ccy+' '+'connection failed...')
             print (error)
             time.sleep(5)
             self.connect()
@@ -248,7 +248,6 @@ class forexcom:
         conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx/GetPositionBlotterWithFilter', req, headers)
         resp = str(conn.getresponse().read())
         resp_dict=xml2dict(resp)
-
         if resp_dict['Success']=='true':
             try:
                 position=int(resp_dict['Output']['Position']['Contract'])
@@ -256,6 +255,7 @@ class forexcom:
                     position_dict={}
 
                     position_dict['units']=abs(position)
+                    position_dict['price']=float(resp_dict['Output']['Position']['AverageRate'])
                     if position>0:
                         position_dict['side']='buy'
                     else:
@@ -264,9 +264,9 @@ class forexcom:
                     return position_dict
 
                 else:
-                    return {'side':'buy','units':0}
+                    return {'side':'buy','units':0, 'price': None}
             except:
-                return {'side':'buy','units':'N/A'} #cannot get contract info
+                return {'side':'buy','units':'N/A', 'price': None} #cannot get contract info
         else:
             print ('invalid product...')
 

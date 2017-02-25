@@ -29,9 +29,9 @@ class Oanda:
 
             self.client = oandapyV20.API(access_token=self.token)
 
-            print (self.broker_name+'connection succeeded...')
+            print (self.broker_name+self.ccy+' '+'connection succeeded...')
         except:
-            print (self.broker_name+'connection failed...')
+            print (self.broker_name+self.ccy+' '+'connection failed...')
             time.sleep(5)
             self.connect()
 
@@ -122,7 +122,7 @@ class Oanda:
 
         if resp_position['positions']==[]:
 
-            return {'side':'buy','units':0}
+            return {'side':'buy','units':0, 'price': None}
 
         else:
             in_position_list=False
@@ -133,13 +133,13 @@ class Oanda:
                     net_position=int(pos['short']['units'])+int(pos['long']['units'])
 
                     if net_position>0:
-                        return {'side':'buy','units':abs(net_position)}
+                        return {'side':'buy','units':abs(net_position), 'price': float(pos['long']['averagePrice'])}
 
                     elif net_position<0:
-                        return {'side':'sell','units':abs(net_position)}
+                        return {'side':'sell','units':abs(net_position), 'price': float(pos['short']['averagePrice'])}
 
             if in_position_list==False:
 
-                return {'side':'buy','units':0}
+                return {'side':'buy','units':0, 'price': None}
 
 
