@@ -53,7 +53,6 @@ class hft:
         self.broker2=Oanda(ccy, set_obj)
 
         self.ccy=ccy #in XXX_YYY format
-        self.set_obj=set_obj
         self.locker=threading.Lock()
         self.is_open=None
         self.open_type=''
@@ -169,134 +168,110 @@ class hft:
 
 
     def execute(self):
-        #threshold=0.33
         try:
 
             if self.is_open==False: #does not have open position
                 #ask=buy, bid=sell
                 if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1]:
-                    fill_price_buy=self.broker1.make_limit_order(self.amount, 'B', self.last_quote1['ask'])
-                    if fill_price_buy>0:
-                        fill_price_sell=self.broker2.make_mkt_order(self.amount, 'sell')
+                    fill_price=self.buy1sell2()
 
-                        self.spread_open_act=fill_price_sell-fill_price_buy
+                    if fill_price!=-1:
 
-                        if self.spread_open_act<=0:
-                            fill_price_sell_c=self.broker1.close_position()
-                            fill_price_buy_c=self.broker2.make_mkt_order(self.amount, 'buy')
+                        self.spread_open_act=fill_price['2']-fill_price['1']
 
-                            #self.locker.acquire(True)
+                        if self.spread_open_act<0:
+
+                            fill_price_close=self.buy1sell2_close()
+
                             print (self.ccy, 'open with negative spread, position closed...')
-                            print ('actual profit: '+str(self.spread_open_act-(fill_price_buy_c-fill_price_sell_c)))
+                            print ('actual profit: '+str(self.spread_open_act-(fill_price_close['2']-fill_price_close['1'])))
                             print (self.last_quote1)
                             print (self.last_quote2)
-                            print ('filled price: ', {'buy1': fill_price_buy, 'sell2':fill_price_sell})
+                            print ('filled price: ', fill_price_close)
+                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                             print ('------------------------------------------------------------')
-                            #self.locker.release()
                         else:
                             self.num_oppo+=1
                             self.is_open=True
                             self.open_type='1a2b'
-                            self.spread_open=self.last_quote2['bid']-self.last_quote1['ask']
 
-                            #self.locker.acquire(True)
                             print (self.ccy, 'open position: 1a<2b')
-                            print ('target open spread: '+str(self.spread_open))
                             print ('actual open spread: '+str(self.spread_open_act))
                             print (self.last_quote1)
                             print (self.last_quote2)
-                            print ('filled price: ', {'buy1': fill_price_buy, 'sell2':fill_price_sell})
+                            print ('filled price: ', fill_price)
                             print ('current total opportunity: '+str(self.num_oppo))
                             print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                             print ('------------------------------------------------------------')
-                            #self.locker.release()
-                            #time.sleep(10)
+
                 elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1]:
-                    fill_price_sell=self.broker1.make_limit_order(self.amount, 'S', self.last_quote1['bid'])
-                    if fill_price_sell>0:
-                        fill_price_buy=self.broker2.make_mkt_order(self.amount, 'buy')
+                    fill_price=self.sell1buy2()
 
-                        self.spread_open_act=fill_price_sell-fill_price_buy
+                    if fill_price!=-1:
 
-                        if self.spread_open_act<=0:
-                            fill_price_buy_c=self.broker1.close_position()
-                            fill_price_sell_c=self.broker2.make_mkt_order(self.amount, 'sell')
+                        self.spread_open_act=fill_price['1']-fill_price['2']
 
-                            #self.locker.acquire(True)
+                        if self.spread_open_act<0:
+
+                            fill_price_close=self.sell1buy2_close()
+
                             print (self.ccy, 'open with negative spread, position closed...')
-                            print ('actual profit: '+str(self.spread_open_act-(fill_price_buy_c-fill_price_sell_c)))
+                            print ('actual profit: '+str(self.spread_open_act-(fill_price_close['1']-fill_price_close['2'])))
                             print (self.last_quote1)
                             print (self.last_quote2)
-                            print ('filled price: ', {'buy2': fill_price_buy, 'sell1':fill_price_sell})
+                            print ('filled price: ', fill_price_close)
+                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                             print ('------------------------------------------------------------')
-                            #self.locker.release()
                         else:
                             self.open_type='2a1b'
                             self.is_open=True
                             self.num_oppo+=1
-                            self.spread_open=self.last_quote1['bid']-self.last_quote2['ask']
 
-                            #self.locker.acquire(True)
                             print (self.ccy, 'open position: 2a<1b')
-                            print ('target open spread: '+str(self.spread_open))
                             print ('actual open spread: '+str(self.spread_open_act))
                             print (self.last_quote1)
                             print (self.last_quote2)
-                            print ('filled price: ', {'buy2': fill_price_buy, 'sell1':fill_price_sell})
+                            print ('filled price: ', fill_price)
                             print ('current total opportunity: '+str(self.num_oppo))
                             print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                             print ('------------------------------------------------------------')
-                            #self.locker.release()
-                            #time.sleep(10)
+
             else: #has open position
 
                 if self.open_type=='1a2b':
 
                     spread_close=-(self.last_quote1['bid']-self.last_quote2['ask'])
-                    #if spread_close<self.spread_open_act[ccy]*threshold:
                     if spread_close< -self.bd[0] and spread_close> -self.bd[1]:
+                        fill_price=self.sell1buy2()
 
-                        fill_price_sell=self.broker1.make_limit_order(self.amount, 'S', self.last_quote1['bid'])
-                        if fill_price_sell>0:
-                            fill_price_buy=self.broker2.make_mkt_order(self.amount, 'buy')
-
+                        if fill_price!=-1:
                             self.is_open=False
-                            #self.locker.acquire(True)
+
                             print (self.ccy, 'close position...')
-                            print ('target close spread: '+str(spread_close))
-                            print ('actual close spread: '+str(fill_price_buy-fill_price_sell))
-                            print ('target profit: '+str(self.spread_open-spread_close))
-                            print ('actual profit: '+str(self.spread_open_act-(fill_price_buy-fill_price_sell)))
+                            print ('actual close spread: '+str(fill_price['2']-fill_price['1']))
+                            print ('actual profit: '+str(self.spread_open_act-(fill_price['2']-fill_price['1'])))
                             print (self.last_quote1)
                             print (self.last_quote2)
-                            print ('filled price: ', {'buy2': fill_price_buy, 'sell1':fill_price_sell})
+                            print ('filled price: ', fill_price)
                             print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                             print ('------------------------------------------------------------')
-                            #self.locker.release()
-
                 elif self.open_type=='2a1b':
 
                     spread_close=-(self.last_quote1['ask']-self.last_quote2['bid'])
-                    #if spread_close<self.spread_open_act[ccy]*threshold:
                     if spread_close< -self.bd[0] and spread_close> -self.bd[1]:
+                        fill_price=self.buy1sell2()
 
-                        fill_price_buy=self.broker1.make_limit_order(self.amount, 'B', self.last_quote1['ask'])
-                        if fill_price_buy>0:
-                            fill_price_sell=self.broker2.make_mkt_order(self.amount, 'sell')
-
+                        if fill_price!=-1:
                             self.is_open=False
-                            #self.locker.acquire(True)
+
                             print (self.ccy, 'close position...')
-                            print ('target close spread: '+str(spread_close))
-                            print ('actual close spread: '+str(fill_price_buy-fill_price_sell))
-                            print ('target profit: '+str(self.spread_open-spread_close))
-                            print ('actual profit: '+str(self.spread_open_act-(fill_price_buy-fill_price_sell)))
+                            print ('actual close spread: '+str(fill_price['1']-fill_price['2']))
+                            print ('actual profit: '+str(self.spread_open_act-(fill_price['1']-fill_price['2'])))
                             print (self.last_quote1)
                             print (self.last_quote2)
-                            print ('filled price: ', {'buy1': fill_price_buy, 'sell2':fill_price_sell})
+                            print ('filled price: ', fill_price)
                             print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                             print ('------------------------------------------------------------')
-                            #self.locker.release()
                 else:
 
                     print ('unknown open type...')
@@ -305,7 +280,39 @@ class hft:
         except Exception as error:
             print (self.ccy, 'error encountered, trading not executed, error: '+str(error))
 
+    def buy1sell2(self):
+        fill_price_buy=self.broker1.make_limit_order(self.amount, 'B', self.last_quote1['ask'])
+        if fill_price_buy>0:
+            fill_price_sell=self.broker2.make_mkt_order(self.amount, 'sell')
 
+            return {'1' : fill_price_buy, '2': fill_price_sell}
+
+        else:
+
+            return -1
+
+    def sell1buy2(self):
+        fill_price_sell=self.broker1.make_limit_order(self.amount, 'S', self.last_quote1['bid'])
+        if fill_price_sell>0:
+            fill_price_buy=self.broker2.make_mkt_order(self.amount, 'buy')
+
+            return {'1' : fill_price_sell, '2': fill_price_buy}
+
+        else:
+
+            return -1
+
+    def buy1sell2_close(self):
+        fill_price_sell=self.broker1.close_position()
+        fill_price_buy=self.broker2.make_mkt_order(self.amount, 'buy')
+
+        return {'1' : fill_price_sell, '2': fill_price_buy}
+
+    def sell1buy2_close(self):
+        fill_price_buy=self.broker1.close_position()
+        fill_price_sell=self.broker2.make_mkt_order(self.amount, 'sell')
+
+        return {'1' : fill_price_buy, '2': fill_price_sell}
 
 class set:
     def __init__(self, login_file):
