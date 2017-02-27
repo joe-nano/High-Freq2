@@ -276,7 +276,7 @@ class hft:
 
                     print ('unknown open type...')
 
-
+            print ('heartbeat('+self.ccy+') '+str(datetime.datetime.now())+'...')
         except Exception as error:
             print (self.ccy, 'error encountered, trading not executed, error: '+str(error))
 
