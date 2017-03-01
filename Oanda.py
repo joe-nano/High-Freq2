@@ -26,28 +26,14 @@ class Oanda:
         try:
             self.account_id=self.set_obj.get_account_num()
             self.token=self.set_obj.get_account_token()
-
-            self.client = oandapyV20.API(access_token=self.token)
+            para={'timeout':30}
+            self.client = oandapyV20.API(access_token=self.token, request_params=para)
 
             print (self.broker_name+self.ccy+' '+'connection succeeded...')
         except:
             print (self.broker_name+self.ccy+' '+'connection failed...')
             time.sleep(5)
             self.connect()
-
-    def live_stream(self):
-
-        params ={
-            "instruments": self.ccy
-
-        }
-
-        req = pricing.PricingStream(accountID=self.account_id, params=params)
-        resp_stream = self.client.request(req)
-        for ticks in resp_stream:
-            if ticks['type']!='HEARTBEAT':
-                #print (self.broker_name+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
-                self.latest_quotes[ticks['instrument']]={'bid':float(ticks['bids'][0]['price']), 'ask':float(ticks['asks'][0]['price'])}
 
 
 
