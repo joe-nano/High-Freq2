@@ -23,8 +23,9 @@ def main(args):
 
         #start trading
 
-        #ccy_list=['USD_JPY','USD_DKK', 'EUR_USD', 'GBP_USD', 'AUD_USD', 'USD_CHF', 'USD_CAD', 'NZD_USD']
-        ccy_list=['USD_JPY','USD_DKK', 'EUR_GBP', 'USD_CAD']
+        ccy_list=['USD_JPY','USD_DKK', 'EUR_USD', 'GBP_USD', 'AUD_USD', 'USD_CHF', 'USD_CAD', 'NZD_USD']
+        #ccy_list=['USD_JPY', 'USD_DKK', 'EUR_USD', 'GBP_USD', 'USD_CAD']
+        #ccy_list=['AUD_USD']
 
         hft_list=[]
 

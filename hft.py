@@ -56,7 +56,7 @@ class hft:
         self.locker=threading.Lock()
         self.is_open=None
         self.open_type=''
-        self.check_position() #initialize is_open flag/open type
+
         self.bd=get_boundary(self.ccy)
         self.last_quote1={'ask':-999999,'bid':-999999}
         self.last_quote2={'ask':-999999,'bid':-999999}
@@ -66,24 +66,28 @@ class hft:
         self.spread_open=0
         self.spread_open_act=0
 
-        self.amount=5000
+        self.max_amount=10000
+        self.current_amount=0
+        self.amount=1000
 
+        self.s=None
 
+        self.check_position() #initialize is_open flag/open type, get current amount
 
     def trading(self, broker):
 
 
         if broker=='Forexcom':
 
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((self.broker1.rates_conn_info['IP'], int(self.broker1.rates_conn_info['Port'])))
-            s.sendall(bytes(self.broker1.token, 'utf-8'))
+            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.s.settimeout(30)
+            self.s.connect((self.broker1.rates_conn_info['IP'], int(self.broker1.rates_conn_info['Port'])))
+            self.s.sendall(bytes(self.broker1.token, 'utf-8'))
 
 
-            while 1:
-                data_tmp=s.recv(1024).decode("utf-8")
-
+            while True:
                 try:
+                    data_tmp=self.s.recv(1024).decode("utf-8")
                     ccy_list_tmp=data_tmp.split('\r')
                     for ccy in ccy_list_tmp:
                         ccy_live_list=ccy.split('\\')
@@ -93,34 +97,44 @@ class hft:
 
                             if ccy_dict[ccy_live_list[0]]==o2f(self.ccy):
                                 self.locker.acquire(True)
+                                #print (self.ccy, 'Forex.com try to execute...')
                                 self.execute()
                                 self.locker.release()
 
                     #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), data_tmp)
 
-                except:
-                    None
+                except Exception as error:
+                    if ('timed' in str(error))==True:
+                        self.broker1.connect()
+                        self.trading('Forexcom')
 
         elif broker=='Oanda':
 
             params ={
-                "instruments": self.broker2.ccy
-
+                "instruments": self.broker2.ccy,
             }
 
-            req = pricing.PricingStream(accountID=self.broker2.account_id, params=params)
-            resp_stream = self.broker2.client.request(req)
-            for ticks in resp_stream:
-                if ticks['type']!='HEARTBEAT':
+            try:
+                req = pricing.PricingStream(accountID=self.broker2.account_id, params=params)
+                resp_stream = self.broker2.client.request(req)
+                for ticks in resp_stream:
+                    if ticks['type']!='HEARTBEAT':
 
-                    #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
+                        #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
 
-                    self.last_quote2['bid']=float(ticks['bids'][0]['price'])
-                    self.last_quote2['ask']=float(ticks['asks'][0]['price'])
+                        self.last_quote2['bid']=float(ticks['bids'][0]['price'])
+                        self.last_quote2['ask']=float(ticks['asks'][0]['price'])
 
-                    self.locker.acquire(True)
-                    self.execute()
-                    self.locker.release()
+                        self.locker.acquire(True)
+                        #print (self.ccy, 'Oanda try to execute...')
+                        self.execute()
+                        self.locker.release()
+
+            except Exception as error:
+                if ('timed' in str(error))==True or ('Max' in str(error))==True:
+                    print ('Oanda '+str(self.broker2.ccy)+' connection failed...')
+                    time.sleep(5)
+                    self.trading('Oanda')
 
         else:
 
@@ -150,133 +164,71 @@ class hft:
 
         #check current open position:
         if broker1_pos_info['units']!=0 and broker2_pos_info['units']!=0: #both account has open position
-            self.is_open=True
-            self.spread_open_act=abs(broker1_pos_info['price']-broker2_pos_info['price']) #assume existing spread > 0
-            if broker1_pos_info['side']=='buy' and broker2_pos_info['side']=='sell':
-                self.open_type='1a2b'
-            elif broker1_pos_info['side']=='sell' and broker2_pos_info['side']=='buy':
-                self.open_type='1b2a'
-        elif broker1_pos_info['units']==0 and broker2_pos_info['units']==0: #both account has no open position
-            self.is_open=False
-        else: #one account has open position
-            if broker1_pos_info['units']!=0:
-                self.broker1.close_position()
-            elif broker2_pos_info['units']!=0:
-                self.broker2.close_position()
 
-            self.is_open=False
+            if broker1_pos_info['side']=='buy':
+                self.current_amount=broker1_pos_info['units']
+            else:
+                self.current_amount=-broker1_pos_info['units']
+
+            #self.spread_open_act=abs(broker1_pos_info['price']-broker2_pos_info['price']) #assume existing spread > 0
+
+        elif broker1_pos_info['units']!=0: #only one account has open position, close it
+            self.broker1.close_position()
+
+
+        elif broker2_pos_info['units']!=0:
+            self.broker2.close_position()
+
+            #self.is_open=False
 
 
     def execute(self):
         try:
 
-            if self.is_open==False: #does not have open position
-                #ask=buy, bid=sell
-                if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1]:
-                    fill_price=self.buy1sell2()
+            #ask=buy, bid=sell
+            if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and self.current_amount<self.max_amount:
+                fill_price=self.buy1sell2()
 
-                    if fill_price!=-1:
+                if fill_price!=-1:
 
-                        self.spread_open_act=fill_price['2']-fill_price['1']
+                    self.spread_open_act=fill_price['2']-fill_price['1']
+                    self.num_oppo+=1
+                    #self.is_open=True
+                    #self.open_type='1a2b'
+                    self.current_amount+=self.amount #relative to broker1
 
-                        if self.spread_open_act<0:
+                    print (self.ccy, 'open position: buy Forex.com sell Oanda')
+                    print ('current total amount: '+str(self.current_amount))
+                    print ('actual open spread: '+str(self.spread_open_act))
+                    print (self.last_quote1)
+                    print (self.last_quote2)
+                    print ('filled price: ', fill_price)
+                    print ('current total opportunity: '+str(self.num_oppo))
+                    print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                    print ('------------------------------------------------------------')
 
-                            fill_price_close=self.buy1sell2_close()
+            elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and self.current_amount>-self.max_amount:
+                fill_price=self.sell1buy2()
 
-                            print (self.ccy, 'open with negative spread, position closed...')
-                            print ('actual profit: '+str(self.spread_open_act-(fill_price_close['2']-fill_price_close['1'])))
-                            print (self.last_quote1)
-                            print (self.last_quote2)
-                            print ('filled price: ', fill_price_close)
-                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                            print ('------------------------------------------------------------')
-                        else:
-                            self.num_oppo+=1
-                            self.is_open=True
-                            self.open_type='1a2b'
+                if fill_price!=-1:
 
-                            print (self.ccy, 'open position: 1a<2b')
-                            print ('actual open spread: '+str(self.spread_open_act))
-                            print (self.last_quote1)
-                            print (self.last_quote2)
-                            print ('filled price: ', fill_price)
-                            print ('current total opportunity: '+str(self.num_oppo))
-                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                            print ('------------------------------------------------------------')
+                    self.spread_open_act=fill_price['1']-fill_price['2']
+                    self.num_oppo+=1
+                    #self.is_open=True
+                    #self.open_type='2a1b'
+                    self.current_amount-=self.amount
 
-                elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1]:
-                    fill_price=self.sell1buy2()
+                    print (self.ccy, 'open position: buy Oanda sell Forex.com')
+                    print ('current total amount: '+str(self.current_amount))
+                    print ('actual open spread: '+str(self.spread_open_act))
+                    print (self.last_quote1)
+                    print (self.last_quote2)
+                    print ('filled price: ', fill_price)
+                    print ('current total opportunity: '+str(self.num_oppo))
+                    print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                    print ('------------------------------------------------------------')
 
-                    if fill_price!=-1:
-
-                        self.spread_open_act=fill_price['1']-fill_price['2']
-
-                        if self.spread_open_act<0:
-
-                            fill_price_close=self.sell1buy2_close()
-
-                            print (self.ccy, 'open with negative spread, position closed...')
-                            print ('actual profit: '+str(self.spread_open_act-(fill_price_close['1']-fill_price_close['2'])))
-                            print (self.last_quote1)
-                            print (self.last_quote2)
-                            print ('filled price: ', fill_price_close)
-                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                            print ('------------------------------------------------------------')
-                        else:
-                            self.open_type='2a1b'
-                            self.is_open=True
-                            self.num_oppo+=1
-
-                            print (self.ccy, 'open position: 2a<1b')
-                            print ('actual open spread: '+str(self.spread_open_act))
-                            print (self.last_quote1)
-                            print (self.last_quote2)
-                            print ('filled price: ', fill_price)
-                            print ('current total opportunity: '+str(self.num_oppo))
-                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                            print ('------------------------------------------------------------')
-
-            else: #has open position
-
-                if self.open_type=='1a2b':
-
-                    spread_close=-(self.last_quote1['bid']-self.last_quote2['ask'])
-                    if spread_close< -self.bd[0] and spread_close> -self.bd[1]:
-                        fill_price=self.sell1buy2()
-
-                        if fill_price!=-1:
-                            self.is_open=False
-
-                            print (self.ccy, 'close position...')
-                            print ('actual close spread: '+str(fill_price['2']-fill_price['1']))
-                            print ('actual profit: '+str(self.spread_open_act-(fill_price['2']-fill_price['1'])))
-                            print (self.last_quote1)
-                            print (self.last_quote2)
-                            print ('filled price: ', fill_price)
-                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                            print ('------------------------------------------------------------')
-                elif self.open_type=='2a1b':
-
-                    spread_close=-(self.last_quote1['ask']-self.last_quote2['bid'])
-                    if spread_close< -self.bd[0] and spread_close> -self.bd[1]:
-                        fill_price=self.buy1sell2()
-
-                        if fill_price!=-1:
-                            self.is_open=False
-
-                            print (self.ccy, 'close position...')
-                            print ('actual close spread: '+str(fill_price['1']-fill_price['2']))
-                            print ('actual profit: '+str(self.spread_open_act-(fill_price['1']-fill_price['2'])))
-                            print (self.last_quote1)
-                            print (self.last_quote2)
-                            print ('filled price: ', fill_price)
-                            print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                            print ('------------------------------------------------------------')
-                else:
-
-                    print ('unknown open type...')
-
-            print ('heartbeat('+self.ccy+') '+str(datetime.datetime.now())+'...')
+            #print ('heartbeat('+self.ccy+') '+str(datetime.datetime.now())+'...')
         except Exception as error:
             print (self.ccy, 'error encountered, trading not executed, error: '+str(error))
 
