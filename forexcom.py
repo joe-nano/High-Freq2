@@ -78,9 +78,7 @@ ccy_dict={'R20': 'EUR/DKK',
           'R1': 'EUR/USD',
           'R74': 'ZAR/JPY',
           'R37': 'EUR/NOK',
-          'R38': 'EUR/SEK',
-          'R4': 'XAU/USD',
-          'R28':'XAG/USD'}
+          'R38': 'EUR/SEK'}
 
 class XmlListConfig(list):
     def __init__(self, aList):
