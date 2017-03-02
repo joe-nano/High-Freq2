@@ -17,7 +17,7 @@ def main(args):
     else:
 
         #login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_ht.csv'
-        login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/test/login_file_test.csv'
+        login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/test/login_info_ht.csv'
 
         set_obj=set(login_file)
 
