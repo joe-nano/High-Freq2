@@ -16,16 +16,16 @@ def main(args):
         return None
     else:
 
-        login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_ht.csv'
-        #login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/test/login_file_test.csv'
+        #login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_ht.csv'
+        login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/test/login_file_test.csv'
 
         set_obj=set(login_file)
 
         #start trading
 
-        ccy_list=['USD_JPY','USD_DKK', 'EUR_USD', 'GBP_USD', 'AUD_USD', 'USD_CHF', 'USD_CAD', 'NZD_USD']
+        ccy_list=['USD_JPY','USD_DKK', 'EUR_USD', 'GBP_USD', 'AUD_USD', 'USD_CHF', 'USD_CAD', 'NZD_USD', 'AUD_JPY', 'GBP_JPY', 'EUR_JPY', 'CAD_JPY']
         #ccy_list=['USD_JPY', 'USD_DKK', 'EUR_USD', 'GBP_USD', 'USD_CAD']
-        #ccy_list=['AUD_USD']
+        #ccy_list=['EUR_JPY']
 
         hft_list=[]
 

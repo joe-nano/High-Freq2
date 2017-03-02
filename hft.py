@@ -48,9 +48,11 @@ class hft:
 
 
     def __init__(self, ccy, set_obj):
-
+        run_time=time.strftime("%Y%m%d_%H%M%S")
         self.broker1=forexcom(o2f(ccy), set_obj)
         self.broker2=Oanda(ccy, set_obj)
+        log_dir='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/test/hft log'
+        #log_dir='/Users/MengfeiZhang/Desktop/tmp'
 
         self.ccy=ccy #in XXX_YYY format
         self.locker=threading.Lock()
@@ -62,7 +64,7 @@ class hft:
         self.last_quote2={'ask':-999999,'bid':-999999}
 
 
-        self.num_oppo=0
+        self.num_trade=0
         self.spread_open=0
         self.spread_open_act=0
 
@@ -71,6 +73,7 @@ class hft:
         self.amount=1000
 
         self.s=None
+        self.f=open(log_dir+'/'+self.ccy+'_hft_log_'+run_time+'.txt','w')
 
         self.check_position() #initialize is_open flag/open type, get current amount
 
@@ -184,7 +187,7 @@ class hft:
 
     def execute(self):
         try:
-
+            print ('test print: '+str(self.num_trade), file=self.f)
             #ask=buy, bid=sell
             if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and self.current_amount<self.max_amount:
                 fill_price=self.buy1sell2()
@@ -192,20 +195,20 @@ class hft:
                 if fill_price!=-1:
 
                     self.spread_open_act=fill_price['2']-fill_price['1']
-                    self.num_oppo+=1
-                    #self.is_open=True
-                    #self.open_type='1a2b'
+                    self.num_trade+=1
                     self.current_amount+=self.amount #relative to broker1
 
-                    print (self.ccy, 'open position: buy Forex.com sell Oanda')
-                    print ('current total amount: '+str(self.current_amount))
-                    print ('actual open spread: '+str(self.spread_open_act))
-                    print (self.last_quote1)
-                    print (self.last_quote2)
-                    print ('filled price: ', fill_price)
-                    print ('current total opportunity: '+str(self.num_oppo))
-                    print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                    print ('------------------------------------------------------------')
+                    time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    print (self.ccy+' trading triggered '+str(time_now)+'...')
+                    print (self.ccy+': buy Forex.com sell Oanda', file=self.f)
+                    print ('current total amount: '+str(self.current_amount), file=self.f)
+                    print ('actual open spread: '+str(self.spread_open_act), file=self.f)
+                    print (self.last_quote1, file=self.f)
+                    print (self.last_quote2, file=self.f)
+                    print ('filled price: '+str(fill_price), file=self.f)
+                    print ('total number of trade: '+str(self.num_trade), file=self.f)
+                    print (time_now, file=self.f)
+                    print ('------------------------------------------------------------', file=self.f)
 
             elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and self.current_amount>-self.max_amount:
                 fill_price=self.sell1buy2()
@@ -213,20 +216,20 @@ class hft:
                 if fill_price!=-1:
 
                     self.spread_open_act=fill_price['1']-fill_price['2']
-                    self.num_oppo+=1
-                    #self.is_open=True
-                    #self.open_type='2a1b'
+                    self.num_trade+=1
                     self.current_amount-=self.amount
 
-                    print (self.ccy, 'open position: buy Oanda sell Forex.com')
-                    print ('current total amount: '+str(self.current_amount))
-                    print ('actual open spread: '+str(self.spread_open_act))
-                    print (self.last_quote1)
-                    print (self.last_quote2)
-                    print ('filled price: ', fill_price)
-                    print ('current total opportunity: '+str(self.num_oppo))
-                    print (datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                    print ('------------------------------------------------------------')
+                    time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    print (self.ccy+' trading triggered '+str(time_now)+'...')
+                    print (self.ccy+': buy Oanda sell Forex.com', file=self.f)
+                    print ('current total amount: '+str(self.current_amount), file=self.f)
+                    print ('actual open spread: '+str(self.spread_open_act), file=self.f)
+                    print (self.last_quote1, file=self.f)
+                    print (self.last_quote2, file=self.f)
+                    print ('filled price: '+str(fill_price), file=self.f)
+                    print ('total numer of trade: '+str(self.num_trade), file=self.f)
+                    print (time_now, file=self.f)
+                    print ('------------------------------------------------------------', file=self.f)
 
             #print ('heartbeat('+self.ccy+') '+str(datetime.datetime.now())+'...')
         except Exception as error:
@@ -254,17 +257,7 @@ class hft:
 
             return -1
 
-    def buy1sell2_close(self):
-        fill_price_sell=self.broker1.close_position()
-        fill_price_buy=self.broker2.make_mkt_order(self.amount, 'buy')
 
-        return {'1' : fill_price_sell, '2': fill_price_buy}
-
-    def sell1buy2_close(self):
-        fill_price_buy=self.broker1.close_position()
-        fill_price_sell=self.broker2.make_mkt_order(self.amount, 'sell')
-
-        return {'1' : fill_price_buy, '2': fill_price_sell}
 
 class set:
     def __init__(self, login_file):
