@@ -187,7 +187,6 @@ class hft:
 
     def execute(self):
         try:
-            print ('test print: '+str(self.num_trade), file=self.f)
             #ask=buy, bid=sell
             if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and self.current_amount<self.max_amount:
                 fill_price=self.buy1sell2()
