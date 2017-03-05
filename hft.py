@@ -215,8 +215,9 @@ class hft:
             #ask=buy, bid=sell
             if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and self.current_amount<self.max_amount:
                 fill_price=self.buy1sell2()
+
                 if fill_price!=-1:
-                    print (fill_price)
+
                     self.spread_open_act=fill_price['2']-fill_price['1']
                     self.num_trade+=1
                     self.current_amount+=self.amount #relative to broker1
@@ -248,7 +249,7 @@ class hft:
 
                     time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     trd_rec={
-                        'datetime':'\'+'+time_now+'\'',
+                        'datetime':'\''+time_now+'\'',
                         'ccy':'\''+self.ccy+'\'',
                         'amount':-self.amount,
                         'buysell':'\''+'sell Forex.com/buy Oanda'+'\'',
