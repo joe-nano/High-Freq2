@@ -20,6 +20,7 @@ import oandapyV20.endpoints.positions as positions
 import ast
 from forexcom import *
 from Oanda import *
+from pymysql import connect, err, sys, cursors
 
 
 def get_boundary(ccy):
@@ -42,6 +43,25 @@ def f2o(ccy):
 def o2f(ccy):
     ccy_pair=ccy.split('_')
     return ccy_pair[0]+'/'+ccy_pair[1]
+
+
+def insert_trd_rec(conn, trd_rec):
+    cur=conn.cursor()
+
+    values=''
+    key_list=['datetime','ccy','amount','buysell','sprd_open','forex_quote','oanda_quote','fill_price']
+    for key in key_list:
+        value_tmp=str(trd_rec[key])#.replace(',','/').replace(':','/')
+        print (str(key)+' : '+value_tmp)
+        values+=value_tmp+','
+    values=values[0:-1]
+
+    sql="INSERT INTO fxarb VALUES ("+values+");"
+
+    #print (sql)
+    cur.execute(str(sql))
+    cur.close()
+    conn.commit()
 
 
 class hft:
@@ -76,6 +96,11 @@ class hft:
         #self.f=open(log_dir+'/'+self.ccy+'_hft_log_'+run_time+'.txt','w')
 
         self.check_position() #initialize is_open flag/open type, get current amount
+
+        self.conn_db= connect(host='localhost',
+                      user='root',
+                      passwd='891124',
+                      db='tradingdb')
 
     def trading(self, broker):
 
@@ -190,23 +215,26 @@ class hft:
             #ask=buy, bid=sell
             if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and self.current_amount<self.max_amount:
                 fill_price=self.buy1sell2()
-
                 if fill_price!=-1:
-
+                    print (fill_price)
                     self.spread_open_act=fill_price['2']-fill_price['1']
                     self.num_trade+=1
                     self.current_amount+=self.amount #relative to broker1
 
                     time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    print (self.ccy+' trading triggered '+str(time_now)+'...')
-                    print (self.ccy+': buy Forex.com sell Oanda')
-                    print ('current total amount: '+str(self.current_amount))
-                    print ('actual open spread: '+str(self.spread_open_act))
-                    print (self.last_quote1)
-                    print (self.last_quote2)
-                    print ('filled price: '+str(fill_price))
-                    print ('total number of trade: '+str(self.num_trade))
-                    print (time_now)
+
+                    trd_rec={
+                        'datetime':'\''+time_now+'\'',
+                        'ccy':'\''+self.ccy+'\'',
+                        'amount':self.amount,
+                        'buysell':'\''+'buy Forex.com/sell Oanda'+'\'',
+                        'sprd_open':self.spread_open_act,
+                        'forex_quote':'\''+str(self.last_quote1).replace('\'','')+'\'',
+                        'oanda_quote':'\''+str(self.last_quote2).replace('\'','')+'\'',
+                        'fill_price':'\''+str(fill_price).replace('\'','')+'\''
+                    }
+                    insert_trd_rec(self.conn_db, trd_rec)
+                    print (self.ccy, 'current number of trade: '+str(self.num_trade))
                     print ('------------------------------------------------------------')
 
             elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and self.current_amount>-self.max_amount:
@@ -219,15 +247,18 @@ class hft:
                     self.current_amount-=self.amount
 
                     time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    print (self.ccy+' trading triggered '+str(time_now)+'...')
-                    print (self.ccy+': buy Oanda sell Forex.com')
-                    print ('current total amount: '+str(self.current_amount))
-                    print ('actual open spread: '+str(self.spread_open_act))
-                    print (self.last_quote1)
-                    print (self.last_quote2)
-                    print ('filled price: '+str(fill_price))
-                    print ('total numer of trade: '+str(self.num_trade))
-                    print (time_now)
+                    trd_rec={
+                        'datetime':'\'+'+time_now+'\'',
+                        'ccy':'\''+self.ccy+'\'',
+                        'amount':-self.amount,
+                        'buysell':'\''+'sell Forex.com/buy Oanda'+'\'',
+                        'sprd_open':self.spread_open_act,
+                        'forex_quote':'\''+str(self.last_quote1).replace('\'','')+'\'',
+                        'oanda_quote':'\''+str(self.last_quote2).replace('\'','')+'\'',
+                        'fill_price':'\''+str(fill_price).replace('\'','')+'\''
+                    }
+                    insert_trd_rec(self.conn_db, trd_rec)
+                    print (self.ccy, 'current number of trade: '+str(self.num_trade))
                     print ('------------------------------------------------------------')
 
             #print ('heartbeat('+self.ccy+') '+str(datetime.datetime.now())+'...')
