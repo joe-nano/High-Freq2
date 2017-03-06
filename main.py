@@ -16,8 +16,8 @@ def main(args):
         return None
     else:
 
-        login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_ht.csv'
-        #login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/test/login_info_ht.csv'
+        #login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_ht.csv'
+        login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/test/login_info_ht.csv'
 
         set_obj=set(login_file)
 
@@ -35,7 +35,7 @@ def main(args):
         threads=[]
 
         for hft_obj in hft_list:
-            threads.append(threading.Thread(target=hft_obj.start,args=[]))
+            threads.append(threading.Thread(target=hft_obj.start(),args=None))
 
         for thread in threads:
             thread.start()
