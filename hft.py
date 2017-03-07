@@ -26,10 +26,10 @@ from pymysql import connect, err, sys, cursors
 def get_boundary(ccy):
 
     if ('JPY' in ccy)==True:
-        lb=0.001
+        lb=0.005
         ub=1
     else:
-        lb=0.00001
+        lb=0.0001
         ub=1
 
     return (lb, ub)
@@ -44,24 +44,6 @@ def o2f(ccy):
     ccy_pair=ccy.split('_')
     return ccy_pair[0]+'/'+ccy_pair[1]
 
-
-def insert_trd_rec(conn, trd_rec):
-    cur=conn.cursor()
-
-    values=''
-    key_list=['datetime','ccy','amount','buysell','sprd_open','forex_quote','oanda_quote','fill_price']
-    for key in key_list:
-        value_tmp=str(trd_rec[key])#.replace(',','/').replace(':','/')
-        print (str(key)+' : '+value_tmp)
-        values+=value_tmp+','
-    values=values[0:-1]
-
-    sql="INSERT INTO fxarb VALUES ("+values+");"
-
-    #print (sql)
-    cur.execute(str(sql))
-    cur.close()
-    conn.commit()
 
 
 class hft:
@@ -88,19 +70,49 @@ class hft:
         self.spread_open=0
         self.spread_open_act=0
 
-        self.max_amount=10000
+        self.max_amount=50000
         self.current_amount=0
-        self.amount=1000
+        self.amount=10000
 
         self.s=None
         #self.f=open(log_dir+'/'+self.ccy+'_hft_log_'+run_time+'.txt','w')
 
         self.check_position() #initialize is_open flag/open type, get current amount
+        self.connect_db()
+
+    def connect_db(self):
 
         self.conn_db= connect(host='localhost',
-                      user='root',
-                      passwd='891124',
-                      db='tradingdb')
+                              user='root',
+                              passwd='891124',
+                              db='tradingdb')
+
+
+    def insert_trd_rec(self, trd_rec):
+
+        try:
+            cur=self.conn_db.cursor()
+
+            values=''
+            key_list=['datetime','ccy','amount','buysell','sprd_open','forex_quote','oanda_quote','fill_price']
+            for key in key_list:
+                value_tmp=str(trd_rec[key])#.replace(',','/').replace(':','/')
+                print (str(key)+' : '+value_tmp)
+                values+=value_tmp+','
+            values=values[0:-1]
+
+            sql="INSERT INTO fxarb VALUES ("+values+");"
+
+            #print (sql)
+            cur.execute(str(sql))
+            cur.close()
+            self.conn_db.commit()
+        except Exception as error:
+            #if ('ConnectionAbortedError' in str(error))==True:
+            print (str(error))
+            print ('error encounted, reconnecting...')
+            self.connect_db()
+            self.insert_trd_rec(trd_rec)
 
     def trading(self, broker):
 
@@ -234,7 +246,7 @@ class hft:
                         'oanda_quote':'\''+str(self.last_quote2).replace('\'','')+'\'',
                         'fill_price':'\''+str(fill_price).replace('\'','')+'\''
                     }
-                    insert_trd_rec(self.conn_db, trd_rec)
+                    self.insert_trd_rec(trd_rec)
                     print (self.ccy, 'current number of trade: '+str(self.num_trade))
                     print ('------------------------------------------------------------')
 
@@ -258,34 +270,28 @@ class hft:
                         'oanda_quote':'\''+str(self.last_quote2).replace('\'','')+'\'',
                         'fill_price':'\''+str(fill_price).replace('\'','')+'\''
                     }
-                    insert_trd_rec(self.conn_db, trd_rec)
+                    self.insert_trd_rec(trd_rec)
                     print (self.ccy, 'current number of trade: '+str(self.num_trade))
                     print ('------------------------------------------------------------')
 
             #print ('heartbeat('+self.ccy+') '+str(datetime.datetime.now())+'...')
         except Exception as error:
-            print (self.ccy, 'error encountered, trading not executed, error: '+str(error))
+            print (self.ccy, 'error encountered, error: '+str(error))
 
     def buy1sell2(self):
         fill_price_buy=self.broker1.make_limit_order(self.amount, 'B', self.last_quote1['ask'])
         if fill_price_buy>0:
             fill_price_sell=self.broker2.make_mkt_order(self.amount, 'sell')
-
             return {'1' : fill_price_buy, '2': fill_price_sell}
-
         else:
-
             return -1
 
     def sell1buy2(self):
         fill_price_sell=self.broker1.make_limit_order(self.amount, 'S', self.last_quote1['bid'])
         if fill_price_sell>0:
             fill_price_buy=self.broker2.make_mkt_order(self.amount, 'buy')
-
             return {'1' : fill_price_sell, '2': fill_price_buy}
-
         else:
-
             return -1
 
 
