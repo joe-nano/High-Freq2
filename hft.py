@@ -108,11 +108,11 @@ class hft:
             cur.close()
             self.conn_db.commit()
         except Exception as error:
-            #if ('ConnectionAbortedError' in str(error))==True:
-            print (str(error))
-            print ('error encounted, reconnecting...')
-            self.connect_db()
-            self.insert_trd_rec(trd_rec)
+            if ('ConnectionAbortedError' in str(error))==True:
+                print (str(error))
+                print ('error encounted, reconnecting...')
+                self.connect_db()
+                self.insert_trd_rec(trd_rec)
 
     def trading(self, broker):
 

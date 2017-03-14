@@ -26,7 +26,7 @@ def datecov2(date):
 
 headers={
     'Content-Type': 'application/x-www-form-urlencoded',
-    'ApplicationName' : 'FlyCapital Forex.com FX trading software'
+    'ApplicationName' : 'FlyCapital'
 }
 
 # Forex.com currency pair code
