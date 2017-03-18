@@ -26,10 +26,10 @@ from pymysql import connect, err, sys, cursors
 def get_boundary(ccy):
 
     if ('JPY' in ccy)==True:
-        lb=0.005
+        lb=-0.1
         ub=1
     else:
-        lb=0.0001
+        lb=-0.01
         ub=1
 
     return (lb, ub)
@@ -70,9 +70,9 @@ class hft:
         self.spread_open=0
         self.spread_open_act=0
 
-        self.max_amount=50000
+        self.max_amount=5000
         self.current_amount=0
-        self.amount=10000
+        self.amount=1000
 
         self.s=None
         #self.f=open(log_dir+'/'+self.ccy+'_hft_log_'+run_time+'.txt','w')

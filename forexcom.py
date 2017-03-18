@@ -12,22 +12,15 @@ from email.mime.text import MIMEText
 import socket
 import sys
 import json
-
-
-
-
 sys.setrecursionlimit(99999999)
-
 
 
 def datecov2(date):
     date=str(date)
     return date[0:4]+date[5:7]+date[8:10]
 
-headers={
-    'Content-Type': 'application/x-www-form-urlencoded',
-    'ApplicationName' : 'FlyCapital'
-}
+
+
 
 # Forex.com currency pair code
 ccy_dict={'R20': 'EUR/DKK',
@@ -154,6 +147,115 @@ class forexcom:
         self.set_obj=set_obj
         self.ccy=ccy
 
+
+
+        self.header_aut={
+            'Content-Type': 'text/xml; charset=utf-8',
+            'SOAPAction': 'www.GainCapital.com.WebServices/AuthenticateCredentials'
+            }
+
+        self.header_cfg={
+            'Content-Type': 'text/xml; charset=utf-8',
+            'SOAPAction': 'www.GainCapital.com.WebServices/GetConfigurationSettings'
+
+        }
+
+        self.header_lmt_ord={
+            'Content-Type': 'text/xml; charset=utf-8',
+            'SOAPAction': 'www.GainCapital.com.WebServices/DealRequest'
+
+        }
+
+        self.header_close_pos={
+            'Content-Type': 'text/xml; charset=utf-8',
+            'SOAPAction': 'www.GainCapital.com.WebServices/ClosePosition'
+
+        }
+
+        self.header_get_pos={
+            'Content-Type': 'text/xml; charset=utf-8',
+            'SOAPAction': 'www.GainCapital.com.WebServices/GetPositionBlotterWithFilter'
+
+        }
+
+
+        self.req_soap_aut="""<?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+          <soap:Header>
+            <Authenticator xmlns="www.GainCapital.com.WebServices">
+              <ApplicationName>FlyCapital</ApplicationName>
+            </Authenticator>
+          </soap:Header>
+          <soap:Body>
+            <AuthenticateCredentials xmlns="www.GainCapital.com.WebServices">
+              <userID>{username}</userID>
+              <password>{password}</password>
+            </AuthenticateCredentials>
+          </soap:Body>
+        </soap:Envelope>"""
+
+        self.req_soap_cfg="""<?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+          <soap:Header>
+            <Authenticator xmlns="www.GainCapital.com.WebServices">
+              <ApplicationName>FlyCapital</ApplicationName>
+            </Authenticator>
+          </soap:Header>
+          <soap:Body>
+            <GetConfigurationSettings xmlns="www.GainCapital.com.WebServices">
+              <Token>{token}</Token>
+            </GetConfigurationSettings>
+          </soap:Body>
+        </soap:Envelope>"""
+
+        self.req_soap_lmt_ord="""<?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+          <soap:Header>
+            <Authenticator xmlns="www.GainCapital.com.WebServices">
+              <ApplicationName>FlyCapital</ApplicationName>
+            </Authenticator>
+          </soap:Header>
+          <soap:Body>
+            <DealRequest xmlns="www.GainCapital.com.WebServices">
+              <Token>{token}</Token>
+              <Product>{ccy}</Product>
+              <BuySell>{buysell}</BuySell>
+              <Amount>{amount}</Amount>
+              <Rate>{rate}</Rate>
+            </DealRequest>
+          </soap:Body>
+        </soap:Envelope>"""
+
+        self.req_soap_close_pos="""<?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+          <soap:Header>
+            <Authenticator xmlns="www.GainCapital.com.WebServices">
+              <ApplicationName>FlyCapital</ApplicationName>
+            </Authenticator>
+          </soap:Header>
+          <soap:Body>
+            <ClosePosition xmlns="www.GainCapital.com.WebServices">
+              <Token>{token}</Token>
+              <Product>{ccy}</Product>
+            </ClosePosition>
+          </soap:Body>
+        </soap:Envelope>"""
+
+        self.req_soap_get_pos="""<?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+          <soap:Header>
+            <Authenticator xmlns="www.GainCapital.com.WebServices">
+              <ApplicationName>FlyCapital</ApplicationName>
+            </Authenticator>
+          </soap:Header>
+          <soap:Body>
+            <GetPositionBlotterWithFilter xmlns="www.GainCapital.com.WebServices">
+              <Token>{token}</Token>
+              <Product>{ccy}</Product>
+            </GetPositionBlotterWithFilter>
+          </soap:Body>
+        </soap:Envelope>"""
+
         # connect
         self.connect()
 
@@ -161,25 +263,19 @@ class forexcom:
 
         try:
 
-            req=urllib.parse.urlencode({'userID': self.set_obj.get_account_id(),'password':self.set_obj.get_account_pwd()})
-
             conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
-            conn.request('POST', '/gaincapitalwebservices/authenticate/authenticationservice.asmx/AuthenticateCredentials', req, headers)
+            conn.request('POST', '/gaincapitalwebservices/authenticate/authenticationservice.asmx', self.req_soap_aut.format(username=self.set_obj.get_account_id(), password=self.set_obj.get_account_pwd()), self.header_aut)
             resp = str(conn.getresponse().read())
 
-            resp_dict=xml2dict(resp)
-
+            resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['AuthenticateCredentialsResponse']['AuthenticationResult']
             if resp_dict['success']=='true':
                 print (self.broker_name+self.ccy+' '+'connection succeeded...')
                 self.token=resp_dict['token']
 
-                req=urllib.parse.urlencode({'Token': self.token})
-
                 conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
-                conn.request('POST', '/GainCapitalWebServices/Configuration/ConfigurationService.asmx/GetConfigurationSettings', req, headers)
+                conn.request('POST', '/GainCapitalWebServices/Configuration/ConfigurationService.asmx', self.req_soap_cfg.format(token=self.token), self.header_cfg)
                 resp = str(conn.getresponse().read())
-                resp_dict=xml2dict(resp)
-
+                resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['GetConfigurationSettingsResponse']['GetConfigurationSettingsResult']
                 if resp_dict['Success']=='true':
 
                     self.rates_conn_info = resp_dict['RatesConnection']['Connection'][0] #take the first IP and Port
@@ -199,7 +295,7 @@ class forexcom:
             self.connect()
 
 
-
+    '''
     def make_mkt_order(self, amount, side):
         req=urllib.parse.urlencode({'Token': self.token,
                             'Product': self.ccy,
@@ -212,19 +308,14 @@ class forexcom:
         resp_dict=xml2dict(resp)
 
         return float(resp_dict['rate'])
-
+    '''
 
     def make_limit_order(self, amount, side, prc):
-        req=urllib.parse.urlencode({'Token': self.token,
-                    'Product': self.ccy,
-                    'BuySell':side,
-                    'Amount': amount,
-                    'Rate': prc})
 
         conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
-        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx/DealRequest', req, headers)
+        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx', self.req_soap_lmt_ord.format(token=self.token, ccy=self.ccy, buysell=side, amount=amount, rate=prc), self.header_lmt_ord)
         resp = str(conn.getresponse().read())
-        resp_dict=xml2dict(resp)
+        resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['DealRequestResponse']['DealRequestResult']
 
         if resp_dict['success']=='true':
             return float(resp_dict['rate'])
@@ -232,24 +323,20 @@ class forexcom:
             return -1
 
     def close_position(self):
-        req=urllib.parse.urlencode({'Token': self.token,
-                  'Product': self.ccy})
 
         conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
-        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx/ClosePosition', req, headers)
+        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx', self.req_soap_close_pos.format(token=self.token, ccy=self.ccy), self.header_close_pos)
         resp = str(conn.getresponse().read())
-        resp_dict=xml2dict(resp)
+        resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['ClosePositionResponse']['ClosePositionResult']
 
         return float(resp_dict['rate'])
 
     def get_position(self):
-        req=urllib.parse.urlencode({'Token': self.token,
-                          'Product': self.ccy})
 
         conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
-        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx/GetPositionBlotterWithFilter', req, headers)
+        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx', self.req_soap_get_pos.format(token=self.token, ccy=self.ccy), self.header_get_pos)
         resp = str(conn.getresponse().read())
-        resp_dict=xml2dict(resp)
+        resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['GetPositionBlotterWithFilterResponse']['GetPositionBlotterWithFilterResult']
         if resp_dict['Success']=='true':
             try:
                 position=int(resp_dict['Output']['Position']['Contract'])
