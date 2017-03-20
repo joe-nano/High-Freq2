@@ -263,7 +263,7 @@ class forexcom:
 
         try:
 
-            conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+            conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
             conn.request('POST', '/gaincapitalwebservices/authenticate/authenticationservice.asmx', self.req_soap_aut.format(username=self.set_obj.get_account_id(), password=self.set_obj.get_account_pwd()), self.header_aut)
             resp = str(conn.getresponse().read())
 
@@ -272,7 +272,7 @@ class forexcom:
                 print (self.broker_name+self.ccy+' '+'connection succeeded...')
                 self.token=resp_dict['token']
 
-                conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+                conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
                 conn.request('POST', '/GainCapitalWebServices/Configuration/ConfigurationService.asmx', self.req_soap_cfg.format(token=self.token), self.header_cfg)
                 resp = str(conn.getresponse().read())
                 resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['GetConfigurationSettingsResponse']['GetConfigurationSettingsResult']
@@ -302,7 +302,7 @@ class forexcom:
                             'BuySell':side,
                             'Amount': amount})
 
-        conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+        conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
         conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx/DealRequestAtBest', req, headers)
         resp = str(conn.getresponse().read())
         resp_dict=xml2dict(resp)
@@ -312,7 +312,7 @@ class forexcom:
 
     def make_limit_order(self, amount, side, prc):
 
-        conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+        conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
         conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx', self.req_soap_lmt_ord.format(token=self.token, ccy=self.ccy, buysell=side, amount=amount, rate=prc), self.header_lmt_ord)
         resp = str(conn.getresponse().read())
         resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['DealRequestResponse']['DealRequestResult']
@@ -324,7 +324,7 @@ class forexcom:
 
     def close_position(self):
 
-        conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+        conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
         conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx', self.req_soap_close_pos.format(token=self.token, ccy=self.ccy), self.header_close_pos)
         resp = str(conn.getresponse().read())
         resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['ClosePositionResponse']['ClosePositionResult']
@@ -333,7 +333,7 @@ class forexcom:
 
     def get_position(self):
 
-        conn = http.client.HTTPConnection('demoweb.efxnow.com',timeout=10)
+        conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
         conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx', self.req_soap_get_pos.format(token=self.token, ccy=self.ccy), self.header_get_pos)
         resp = str(conn.getresponse().read())
         resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['GetPositionBlotterWithFilterResponse']['GetPositionBlotterWithFilterResult']

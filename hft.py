@@ -26,10 +26,10 @@ from pymysql import connect, err, sys, cursors
 def get_boundary(ccy):
 
     if ('JPY' in ccy)==True:
-        lb=-0.1
+        lb=0.005
         ub=1
     else:
-        lb=-0.01
+        lb=0.0001
         ub=1
 
     return (lb, ub)
@@ -53,8 +53,6 @@ class hft:
         run_time=time.strftime("%Y%m%d_%H%M%S")
         self.broker1=forexcom(o2f(ccy), set_obj)
         self.broker2=Oanda(ccy, set_obj)
-        #log_dir='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/test/hft log'
-        #log_dir='/Users/MengfeiZhang/Desktop/tmp'
 
         self.ccy=ccy #in XXX_YYY format
         self.locker=threading.Lock()
@@ -70,7 +68,7 @@ class hft:
         self.spread_open=0
         self.spread_open_act=0
 
-        self.max_amount=5000
+        self.max_amount=2000
         self.current_amount=0
         self.amount=1000
 

@@ -43,24 +43,24 @@ class Oanda:
         if side=='buy':
 
             order={
-                "order": {
-                "instrument": self.ccy,
-                "units": str(amount),
-                "type": "MARKET",
-                "positionFill": "DEFAULT"
-                }
+                    "order": {
+                    "instrument": self.ccy,
+                    "units": str(amount),
+                    "type": "MARKET",
+                    "positionFill": "DEFAULT"
+                    }
                 }
 
         elif side=='sell':
 
 
             order={
-                "order": {
-                "instrument": self.ccy,
-                "units": str(-amount),
-                "type": "MARKET",
-                "positionFill": "DEFAULT"
-                }
+                    "order": {
+                    "instrument": self.ccy,
+                    "units": str(-amount),
+                    "type": "MARKET",
+                    "positionFill": "DEFAULT"
+                    }
                 }
 
         try:
