@@ -66,17 +66,19 @@ class hft:
         self.open_type=''
 
         self.bd=get_boundary(self.ccy)
-        self.last_quote1={'ask':-999999,'bid':-999999,'timestamp':datetime.datetime(2017, 1, 1, 0, 0, 0, 0)}
-        self.last_quote2={'ask':-999999,'bid':-999999,'timestamp':datetime.datetime(2017, 1, 1, 0, 0, 0, 0)}
-
+        self.last_quote1={'ask':-999999,'bid':-999999}
+        self.last_quote2={'ask':-999999,'bid':-999999}
+        self.time_stamp1=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
+        self.time_stamp2=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
 
         self.num_trade=0
         self.spread_open=0
         self.spread_open_act=0
+        self.spread_cum=0
 
-        self.max_amount=1000
+        self.max_amount=25000
         self.current_amount=0
-        self.amount=1000
+        self.amount=50000
 
         self.s=None
         #self.f=open(log_dir+'/'+self.ccy+'_hft_log_'+run_time+'.txt','w')
@@ -139,7 +141,7 @@ class hft:
 
                             self.last_quote1['bid']=float(ccy_live_list[1])
                             self.last_quote1['ask']=float(ccy_live_list[2])
-                            self.last_quote1['timestamp']=datetime.datetime.now()
+                            self.time_stamp1=datetime.datetime.now()
 
                             self.locker.acquire()
                             #print (self.ccy, 'Forex.com try to execute...')
@@ -165,7 +167,7 @@ class hft:
 
                         self.last_quote2['bid']=float(ticks['bids'][0]['price'])
                         self.last_quote2['ask']=float(ticks['asks'][0]['price'])
-                        self.last_quote2['timestamp']=datetime.datetime.now()
+                        self.time_stamp2=datetime.datetime.now()
 
                         self.locker.acquire()
                         #print (self.ccy, 'Oanda try to execute...')
@@ -213,8 +215,6 @@ class hft:
             else:
                 self.current_amount=-broker1_pos_info['units']
 
-            #self.spread_open_act=abs(broker1_pos_info['price']-broker2_pos_info['price']) #assume existing spread > 0
-
         elif broker1_pos_info['units']!=0: #only one account has open position, close it
             self.broker1.close_position()
 
@@ -229,14 +229,15 @@ class hft:
         try:
             #ask=buy, bid=sell
             trading_time=datetime.datetime.now()
-            dt1=trading_time-self.last_quote1['timestamp']
-            dt2=trading_time-self.last_quote2['timestamp']
+            dt1=trading_time-self.time_stamp1
+            dt2=trading_time-self.time_stamp2
             if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and dt1.total_seconds()<10 and dt2.total_seconds()<10 and self.current_amount<self.max_amount:
                 fill_price=self.buy1sell2()
 
                 if fill_price!=-1:
 
                     self.spread_open_act=fill_price['2']-fill_price['1']
+                    self.spread_cum+=self.spread_open_act
                     self.num_trade+=1
                     self.current_amount+=self.amount #relative to broker1
 
@@ -253,6 +254,7 @@ class hft:
                         'fill_price':'\''+str(fill_price).replace('\'','')+'\''
                     }
                     self.insert_trd_rec(trd_rec)
+                    print ('cumulative open spread: '+str(self.spread_cum))
                     print (self.ccy, 'current number of trade: '+str(self.num_trade))
                     print ('------------------------------------------------------------')
 
@@ -262,6 +264,7 @@ class hft:
                 if fill_price!=-1:
 
                     self.spread_open_act=fill_price['1']-fill_price['2']
+                    self.spread_cum+=self.spread_open_act
                     self.num_trade+=1
                     self.current_amount-=self.amount
 
@@ -277,6 +280,7 @@ class hft:
                         'fill_price':'\''+str(fill_price).replace('\'','')+'\''
                     }
                     self.insert_trd_rec(trd_rec)
+                    print ('cumulative open spread: '+str(self.spread_cum))
                     print (self.ccy, 'current number of trade: '+str(self.num_trade))
                     print ('------------------------------------------------------------')
 
