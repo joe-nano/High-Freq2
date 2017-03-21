@@ -231,7 +231,7 @@ class hft:
             trading_time=datetime.datetime.now()
             dt1=trading_time-self.last_quote1['timestamp']
             dt2=trading_time-self.last_quote2['timestamp']
-            if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and dt1.total_seconds()<10 and dt1.total_seconds()<10 and self.current_amount<self.max_amount:
+            if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and dt1.total_seconds()<10 and dt2.total_seconds()<10 and self.current_amount<self.max_amount:
                 fill_price=self.buy1sell2()
 
                 if fill_price!=-1:
@@ -256,7 +256,7 @@ class hft:
                     print (self.ccy, 'current number of trade: '+str(self.num_trade))
                     print ('------------------------------------------------------------')
 
-            elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and self.current_amount>-self.max_amount:
+            elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and dt1.total_seconds()<10 and dt2.total_seconds()<10 and self.current_amount>-self.max_amount:
                 fill_price=self.sell1buy2()
 
                 if fill_price!=-1:
