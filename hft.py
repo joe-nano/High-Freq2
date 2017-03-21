@@ -24,7 +24,8 @@ from pymysql import connect, err, sys, cursors
 
 # Forex.com currency pair code
 ccy_dict={'R3': 'USD/JPY',
-          'R14': 'USD/DKK'
+          'R14': 'USD/DKK',
+          'R1' : 'EUR/USD'
           }
 
 
@@ -65,8 +66,8 @@ class hft:
         self.open_type=''
 
         self.bd=get_boundary(self.ccy)
-        self.last_quote1={'ask':-999999,'bid':-999999}
-        self.last_quote2={'ask':-999999,'bid':-999999}
+        self.last_quote1={'ask':-999999,'bid':-999999,'timestamp':datetime.datetime(2017, 1, 1, 0, 0, 0, 0)}
+        self.last_quote2={'ask':-999999,'bid':-999999,'timestamp':datetime.datetime(2017, 1, 1, 0, 0, 0, 0)}
 
 
         self.num_trade=0
@@ -136,16 +137,15 @@ class hft:
                         ccy_live_list=ccy.split('\\')
                         if ccy_live_list[0]!='' and ccy_dict[ccy_live_list[0]]==o2f(self.ccy): #not heartbeat
 
-                            print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ccy_live_list)
-
                             self.last_quote1['bid']=float(ccy_live_list[1])
                             self.last_quote1['ask']=float(ccy_live_list[2])
+                            self.last_quote1['timestamp']=datetime.datetime.now()
 
-                            self.locker.acquire(True)
+                            self.locker.acquire()
                             #print (self.ccy, 'Forex.com try to execute...')
                             self.execute()
                             self.locker.release()
-
+                            #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ccy_live_list)
                 except Exception as error:
                     if ('timed' in str(error))==True:
                         self.broker1.connect()
@@ -163,16 +163,16 @@ class hft:
                 for ticks in resp_stream:
                     if ticks['type']!='HEARTBEAT':
 
-                        print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
-
                         self.last_quote2['bid']=float(ticks['bids'][0]['price'])
                         self.last_quote2['ask']=float(ticks['asks'][0]['price'])
+                        self.last_quote2['timestamp']=datetime.datetime.now()
 
-                        self.locker.acquire(True)
+                        self.locker.acquire()
                         #print (self.ccy, 'Oanda try to execute...')
                         self.execute()
                         self.locker.release()
-
+                        #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
+                        
             except Exception as error:
                 if ('timed' in str(error))==True or ('Max' in str(error))==True:
                     print ('Oanda '+str(self.broker2.ccy)+' connection failed...')
@@ -228,7 +228,10 @@ class hft:
     def execute(self):
         try:
             #ask=buy, bid=sell
-            if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and self.current_amount<self.max_amount:
+            trading_time=datetime.datetime.now()
+            dt1=trading_time-self.last_quote1['timestamp']
+            dt2=trading_time-self.last_quote2['timestamp']
+            if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and dt1.total_seconds()<10 and dt1.total_seconds()<10 and self.current_amount<self.max_amount:
                 fill_price=self.buy1sell2()
 
                 if fill_price!=-1:

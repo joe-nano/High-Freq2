@@ -224,7 +224,7 @@ class forexcom:
                 resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['GetConfigurationSettingsResponse']['GetConfigurationSettingsResult']
                 if resp_dict['Success']=='true':
 
-                    self.rates_conn_info = resp_dict['RatesConnection']['Connection'][0] #take the first IP and Port
+                    self.rates_conn_info = resp_dict['RatesConnection']['Connection'][-1] #take the first IP and Port
 
                 else:
                     print (self.broker_name+'unable to get configuration settings...')
