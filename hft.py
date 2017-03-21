@@ -22,6 +22,11 @@ from forexcom import *
 from Oanda import *
 from pymysql import connect, err, sys, cursors
 
+# Forex.com currency pair code
+ccy_dict={'R3': 'USD/JPY',
+          'R14': 'USD/DKK'
+          }
+
 
 def get_boundary(ccy):
 
@@ -68,7 +73,7 @@ class hft:
         self.spread_open=0
         self.spread_open_act=0
 
-        self.max_amount=2000
+        self.max_amount=1000
         self.current_amount=0
         self.amount=1000
 
@@ -129,17 +134,17 @@ class hft:
                     ccy_list_tmp=data_tmp.split('\r')
                     for ccy in ccy_list_tmp:
                         ccy_live_list=ccy.split('\\')
-                        if ccy_live_list[0]!='': #not heart beat
+                        if ccy_live_list[0]!='' and ccy_dict[ccy_live_list[0]]==o2f(self.ccy): #not heartbeat
+
+                            print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ccy_live_list)
+
                             self.last_quote1['bid']=float(ccy_live_list[1])
                             self.last_quote1['ask']=float(ccy_live_list[2])
 
-                            if ccy_dict[ccy_live_list[0]]==o2f(self.ccy):
-                                self.locker.acquire(True)
-                                #print (self.ccy, 'Forex.com try to execute...')
-                                self.execute()
-                                self.locker.release()
-
-                    #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), data_tmp)
+                            self.locker.acquire(True)
+                            #print (self.ccy, 'Forex.com try to execute...')
+                            self.execute()
+                            self.locker.release()
 
                 except Exception as error:
                     if ('timed' in str(error))==True:
@@ -158,7 +163,7 @@ class hft:
                 for ticks in resp_stream:
                     if ticks['type']!='HEARTBEAT':
 
-                        #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
+                        print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
 
                         self.last_quote2['bid']=float(ticks['bids'][0]['price'])
                         self.last_quote2['ask']=float(ticks['asks'][0]['price'])
