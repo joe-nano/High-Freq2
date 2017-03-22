@@ -76,9 +76,9 @@ class hft:
         self.spread_open_act=0
         self.spread_cum=0
 
-        self.max_amount=25000
+        self.max_amount=50000
         self.current_amount=0
-        self.amount=50000
+        self.amount=25000
 
         self.s=None
         #self.f=open(log_dir+'/'+self.ccy+'_hft_log_'+run_time+'.txt','w')
@@ -179,6 +179,7 @@ class hft:
                 if ('timed' in str(error))==True or ('Max' in str(error))==True:
                     print ('Oanda '+str(self.broker2.ccy)+' connection failed...')
                     time.sleep(5)
+                    self.broker2.connect()
                     self.trading('Oanda')
 
         else:

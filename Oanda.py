@@ -3,6 +3,7 @@ from oandapyV20 import API
 import oandapyV20.endpoints.orders as orders
 import oandapyV20.endpoints.pricing as pricing
 import oandapyV20.endpoints.positions as positions
+import oandapyV20.endpoints.accounts as accounts
 import json
 import time
 import threading
@@ -35,7 +36,8 @@ class Oanda:
             self.token=self.set_obj.get_account_token()
             para={'timeout':30}
             self.client = oandapyV20.API(access_token=self.token, environment='live', request_params=para)
-
+            resp_acct = accounts.AccountDetails(self.account_id)
+            self.client.request(resp_acct) #get account info
             print (self.broker_name+self.ccy+' '+'connection succeeded...')
         except:
             print (self.broker_name+self.ccy+' '+'connection failed...')
