@@ -79,7 +79,7 @@ ccy_dict={
 def get_boundary(ccy):
 
     if ('JPY' in ccy)==True:
-        lb=0.005
+        lb=0.01
         ub=1
     else:
         lb=0.0001
@@ -284,7 +284,7 @@ class hft:
                 if self.trd_enabled==True:
                     fill_price=self.buy1sell2()
                 else:
-                    fill_price=-999999
+                    fill_price={'1' : self.last_quote1['bid'], '2': self.last_quote2['ask']}
 
                 if fill_price!=-1:
 
@@ -314,7 +314,7 @@ class hft:
                 if self.trd_enabled==True:
                     fill_price=self.sell1buy2()
                 else:
-                    fill_price=-999999
+                    fill_price={'1' : self.last_quote1['ask'], '2': self.last_quote2['bid']}
 
                 if fill_price!=-1:
 
