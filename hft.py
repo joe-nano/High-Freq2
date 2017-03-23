@@ -23,10 +23,57 @@ from Oanda import *
 from pymysql import connect, err, sys, cursors
 
 # Forex.com currency pair code
-ccy_dict={'R3': 'USD/JPY',
-          'R14': 'USD/DKK',
-          'R1' : 'EUR/USD'
-          }
+ccy_dict={
+    'R1': 'EUR/USD',
+    'R2': 'GBP/USD',
+    'R3': 'USD/JPY',
+    'R5': 'EUR/JPY',
+    'R8': 'AUD/USD',
+    'R9': 'GBP/JPY',
+    'R10': 'EUR/CHF',
+    'R11': 'USD/CAD',
+    'R12': 'EUR/GBP',
+    'R13': 'USD/CHF',
+    'R14': 'USD/DKK',
+    'R15': 'AUD/JPY',
+    'R16': 'USD/HKD',
+    'R17': 'NZD/USD',
+    'R18': 'GBP/AUD',
+    'R19': 'EUR/AUD',
+    'R20': 'EUR/DKK',
+    'R21': 'CAD/JPY',
+    'R22': 'AUD/CAD',
+    'R23': 'EUR/CAD',
+    'R24': 'AUD/NZD',
+    'R25': 'GBP/CAD',
+    'R26': 'GBP/CHF',
+    'R27': 'NZD/JPY',
+    'R29': 'CHF/JPY',
+    'R30': 'EUR/NZD',
+    'R31': 'GBP/NZD',
+    'R32': 'USD/NOK',
+    'R33': 'USD/SEK',
+    'R34': 'USD/SGD',
+    'R35': 'AUD/CHF',
+    'R36': 'CAD/CHF',
+    'R37': 'EUR/NOK',
+    'R38': 'EUR/SEK',
+    'R39': 'NZD/CAD',
+    'R40': 'NZD/CHF',
+    'R43': 'SGD/JPY',
+    'R46': 'USD/MXN',
+    'R47': 'USD/ZAR',
+    'R66': 'USD/PLN',
+    'R67': 'EUR/PLN',
+    'R68': 'USD/TRY',
+    'R69': 'EUR/TRY',
+    'R70': 'USD/HUF',
+    'R71': 'EUR/HUF',
+    'R72': 'USD/CZK',
+    'R73': 'EUR/CZK',
+    'R74': 'ZAR/JPY',
+    'R107': 'USD/CNH'
+}
 
 
 def get_boundary(ccy):
@@ -55,10 +102,11 @@ def o2f(ccy):
 class hft:
 
 
-    def __init__(self, ccy, set_obj):
+    def __init__(self, ccy, trd_enabled, set_obj):
         run_time=time.strftime("%Y%m%d_%H%M%S")
         self.broker1=forexcom(o2f(ccy), set_obj)
         self.broker2=Oanda(ccy, set_obj)
+        self.trd_enabled=trd_enabled
 
         self.ccy=ccy #in XXX_YYY format
         self.locker=threading.Lock()
@@ -233,7 +281,10 @@ class hft:
             dt1=trading_time-self.time_stamp1
             dt2=trading_time-self.time_stamp2
             if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and dt1.total_seconds()<10 and dt2.total_seconds()<10 and self.current_amount<self.max_amount:
-                fill_price=self.buy1sell2()
+                if self.trd_enabled==True:
+                    fill_price=self.buy1sell2()
+                else:
+                    fill_price=-999999
 
                 if fill_price!=-1:
 
@@ -260,7 +311,10 @@ class hft:
                     print ('------------------------------------------------------------')
 
             elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and dt1.total_seconds()<10 and dt2.total_seconds()<10 and self.current_amount>-self.max_amount:
-                fill_price=self.sell1buy2()
+                if self.trd_enabled==True:
+                    fill_price=self.sell1buy2()
+                else:
+                    fill_price=-999999
 
                 if fill_price!=-1:
 
@@ -349,6 +403,23 @@ class set:
 
     def get_email_pwd(self):
         return str(self.email_pwd)
+
+
+def get_hft_list(fileName_, set_obj):
+    hft_list=[]
+    file = open(fileName_, 'r')
+    try:
+        reader = csv.reader(file)
+        for row in reader:
+            if int(row[1])==1:
+                ccy=row[0]
+                if int(row[2])==1:
+                    hft_list.append(hft(ccy, True, set_obj))
+                else:
+                    hft_list.append(hft(ccy, False, set_obj))
+    finally:
+        file.close()
+    return hft_list
 
 
 def send_hotmail(subject, content, set_obj):
