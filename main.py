@@ -16,10 +16,10 @@ def main(args):
         return None
     else:
 
-        #login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_hft.csv'
-        #ccy_list_file='/Users/MengfeiZhang/Desktop/tmp/hft_ccy_list.csv'
-        login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/login_info_hft.csv'
-        ccy_list_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/hft_ccy_list.csv'
+        login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_hft.csv'
+        ccy_list_file='/Users/MengfeiZhang/Desktop/tmp/hft_ccy_list.csv'
+        #login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/login_info_hft.csv'
+        #ccy_list_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/hft_ccy_list.csv'
 
         set_obj=set(login_file)
 
@@ -38,3 +38,6 @@ def main(args):
 
 if __name__=='__main__':
     sys.exit(main(sys.argv))
+
+
+

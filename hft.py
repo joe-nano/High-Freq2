@@ -129,7 +129,6 @@ class hft:
         self.amount=25000
 
         self.s=None
-        #self.f=open(log_dir+'/'+self.ccy+'_hft_log_'+run_time+'.txt','w')
 
         self.check_position() #initialize is_open flag/open type, get current amount
         self.connect_db()
@@ -198,8 +197,10 @@ class hft:
                             #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ccy_live_list)
                 except Exception as error:
                     if ('timed' in str(error))==True:
+                        print ('Forexcom '+str(self.broker2.ccy)+' connection failed...')
                         self.broker1.connect()
                         self.trading('Forexcom')
+
 
         elif broker=='Oanda':
 
@@ -226,9 +227,9 @@ class hft:
             except Exception as error:
                 if ('timed' in str(error))==True or ('Max' in str(error))==True:
                     print ('Oanda '+str(self.broker2.ccy)+' connection failed...')
-                    time.sleep(5)
                     self.broker2.connect()
                     self.trading('Oanda')
+
 
         else:
 
@@ -444,3 +445,4 @@ def format_email_dict(content):
     for item in content.keys():
         content_tmp+=str(item)+':'+str(content[item])+'\r\n'
     return content_tmp
+
