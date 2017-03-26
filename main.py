@@ -7,19 +7,13 @@ from datetime import datetime
 
 def main(args):
 
-    weekday=datetime.today().weekday()
-    now=datetime.now()
 
-    if False: #(int(weekday)==4 and int(now.hour)>=17) or int(weekday)==5 or (int(weekday)==6 and int(now.hour)<17): #Friday 5pm - Sunday 5pm
+    login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_hft.csv'
+    ccy_list_file='/Users/MengfeiZhang/Desktop/tmp/hft_ccy_list.csv'
+    #login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/login_info_hft.csv'
+    #ccy_list_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/hft_ccy_list.csv'
 
-        print ('market closed...')
-        return None
-    else:
-
-        login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_hft.csv'
-        ccy_list_file='/Users/MengfeiZhang/Desktop/tmp/hft_ccy_list.csv'
-        #login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/login_info_hft.csv'
-        #ccy_list_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/hft_ccy_list.csv'
+    if sys.argv[1]=='trading':
 
         set_obj=set(login_file)
 
@@ -34,6 +28,27 @@ def main(args):
 
         for thread in threads:
             thread.start()
+
+    elif sys.argv[1]=='close':
+
+        set_obj=set(login_file)
+
+        #start trading
+
+        ccy_list=['GBP_USD','GBP_JPY'] #list of ccy want to close
+        hft_list=[]
+        for ccy in ccy_list:
+            hft_list.append(hft(ccy, True, set_obj))
+
+        threads=[]
+
+        for hft_obj in hft_list:
+            threads.append(threading.Thread(target=hft_obj.close_position(),args=None))
+
+        for thread in threads:
+            thread.start()
+
+
 
 
 if __name__=='__main__':

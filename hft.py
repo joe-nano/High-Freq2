@@ -21,6 +21,7 @@ import ast
 from forexcom import *
 from Oanda import *
 from pymysql import connect, err, sys, cursors
+import queue
 
 # Forex.com currency pair code
 ccy_dict={
@@ -77,12 +78,12 @@ ccy_dict={
 
 
 def get_boundary(ccy):
-
+    #set threshold to 1.5 pip
     if ('JPY' in ccy)==True:
-        lb=0.01
+        lb=0.015
         ub=1
     else:
-        lb=0.0001
+        lb=0.00015
         ub=1
 
     return (lb, ub)
@@ -124,11 +125,14 @@ class hft:
         self.spread_open_act=0
         self.spread_cum=0
 
-        self.max_amount=50000
-        self.current_amount=0
-        self.amount=25000
+        #configuration
+        self.max_amount=set_obj.get_max_amount()
+        self.amount=set_obj.get_single_amount()
+        self.ping_limit=set_obj.get_ping_limit()
 
+        self.current_amount=0
         self.s=None
+        self.stream_queue=queue.Queue()
 
         self.check_position() #initialize is_open flag/open type, get current amount
         self.connect_db()
@@ -167,6 +171,12 @@ class hft:
                 self.connect_db()
                 self.insert_trd_rec(trd_rec)
 
+    def print_stream(self):
+
+        while True:
+            print (self.stream_queue.get())
+            self.stream_queue.task_done()
+
     def trading(self, broker):
 
 
@@ -193,6 +203,7 @@ class hft:
                             self.locker.acquire()
                             #print (self.ccy, 'Forex.com try to execute...')
                             self.execute()
+                            self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote1))
                             self.locker.release()
                             #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ccy_live_list)
                 except Exception as error:
@@ -221,6 +232,7 @@ class hft:
                         self.locker.acquire()
                         #print (self.ccy, 'Oanda try to execute...')
                         self.execute()
+                        self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
                         self.locker.release()
                         #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
                         
@@ -242,6 +254,7 @@ class hft:
             threads=[]
             threads.append(threading.Thread(target=self.trading,args=['Forexcom']))
             threads.append(threading.Thread(target=self.trading,args=['Oanda']))
+            threads.append(threading.Thread(target=self.print_stream,args=[]))
 
             for thread in threads:
                 thread.start()
@@ -251,6 +264,10 @@ class hft:
             time.sleep(5)
             self.start()
 
+
+    def close_position(self):
+        self.broker1.close_position()
+        self.broker2.close_position()
 
     def check_position(self):
 
@@ -272,7 +289,6 @@ class hft:
         elif broker2_pos_info['units']!=0:
             self.broker2.close_position()
 
-            #self.is_open=False
 
 
     def execute(self):
@@ -281,7 +297,7 @@ class hft:
             trading_time=datetime.datetime.now()
             dt1=trading_time-self.time_stamp1
             dt2=trading_time-self.time_stamp2
-            if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and dt1.total_seconds()<10 and dt2.total_seconds()<10 and self.current_amount<self.max_amount:
+            if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and dt1.total_seconds()<self.ping_limit and dt2.total_seconds()<self.ping_limit and self.current_amount<self.max_amount:
                 if self.trd_enabled==True:
                     fill_price=self.buy1sell2()
                 else:
@@ -311,7 +327,7 @@ class hft:
                     print (self.ccy, 'current number of trade: '+str(self.num_trade))
                     print ('------------------------------------------------------------')
 
-            elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and dt1.total_seconds()<10 and dt2.total_seconds()<10 and self.current_amount>-self.max_amount:
+            elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and dt1.total_seconds()<self.ping_limit and dt2.total_seconds()<self.ping_limit and self.current_amount>-self.max_amount:
                 if self.trd_enabled==True:
                     fill_price=self.sell1buy2()
                 else:
@@ -375,13 +391,15 @@ class set:
                 elif i==2:
                     self.account_pwd=row[0]
                 elif i==3:
-                    self.email_login=row[0]
-                elif i==4:
-                    self.email_pwd=row[0]
-                elif i==5:
                     self.account_num=row[0]
-                elif i==6:
+                elif i==4:
                     self.account_token=row[0]
+                elif i==5:
+                    self.max_amt=row[0]
+                elif i==6:
+                    self.single_amt=row[0]
+                elif i==7:
+                    self.ping_limit=row[0]
                 i+=1
 
         finally:
@@ -399,12 +417,14 @@ class set:
     def get_account_pwd(self):
         return str(self.account_pwd)
 
-    def get_email_login(self):
-        return str(self.email_login)
+    def get_max_amount(self):
+        return int(self.max_amt)
 
-    def get_email_pwd(self):
-        return str(self.email_pwd)
+    def get_single_amount(self):
+        return int(self.single_amt)
 
+    def get_ping_limit(self):
+        return int(self.ping_limit)
 
 def get_hft_list(fileName_, set_obj):
     hft_list=[]
@@ -423,26 +443,4 @@ def get_hft_list(fileName_, set_obj):
     return hft_list
 
 
-def send_hotmail(subject, content, set_obj):
-    msg_txt=format_email_dict(content)
-    from_email={'login': set_obj.get_email_login(), 'pwd': set_obj.get_email_pwd()}
-    to_email='finatos@me.com'
-
-    msg=MIMEText(msg_txt)
-    msg['Subject'] = subject
-    msg['From'] = from_email['login']
-    msg['To'] = to_email
-    mail=smtplib.SMTP('smtp.live.com',25)
-    mail.ehlo()
-    mail.starttls()
-    mail.login(from_email['login'], from_email['pwd'])
-    mail.sendmail(from_email['login'], to_email, msg.as_string())
-    mail.close()
-
-
-def format_email_dict(content):
-    content_tmp=''
-    for item in content.keys():
-        content_tmp+=str(item)+':'+str(content[item])+'\r\n'
-    return content_tmp
 

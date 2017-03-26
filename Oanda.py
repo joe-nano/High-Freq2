@@ -11,6 +11,13 @@ import datetime
 import ast
 import logging
 
+
+logging.basicConfig(
+        filename="/Users/MengfeiZhang/Desktop/tmp/Oanda_v20.log",
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(name)s : %(message)s',
+    )
+
 class Oanda:
 
 
@@ -23,13 +30,6 @@ class Oanda:
         self.connect()
         self.latest_quotes={}
 
-        '''
-        logging.basicConfig(
-                filename="/Users/MengfeiZhang/Desktop/tmp/Oanda_v20.log",
-                level=logging.INFO,
-                format='%(asctime)s [%(levelname)s] %(name)s : %(message)s',
-            )
-        '''
     def connect(self):
         try:
             self.account_id=self.set_obj.get_account_num()
