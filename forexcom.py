@@ -124,6 +124,12 @@ class forexcom:
 
         }
 
+        self.header_get_nav={
+            'Content-Type': 'text/xml; charset=utf-8',
+            'SOAPAction': 'www.GainCapital.com.WebServices/GetMarginBlotter'
+
+        }
+
 
         self.req_soap_aut="""<?xml version="1.0" encoding="utf-8"?>
         <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
@@ -199,6 +205,20 @@ class forexcom:
               <Token>{token}</Token>
               <Product>{ccy}</Product>
             </GetPositionBlotterWithFilter>
+          </soap:Body>
+        </soap:Envelope>"""
+
+        self.req_soap_get_nav="""<?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+          <soap:Header>
+            <Authenticator xmlns="www.GainCapital.com.WebServices">
+              <ApplicationName>FlyCapital</ApplicationName>
+            </Authenticator>
+          </soap:Header>
+          <soap:Body>
+            <GetMarginBlotter xmlns="www.GainCapital.com.WebServices">
+              <Token>{token}</Token>
+            </GetMarginBlotter>
           </soap:Body>
         </soap:Envelope>"""
 
@@ -304,3 +324,16 @@ class forexcom:
                 return {'side':'buy','units':'N/A', 'price': None} #cannot get contract info
         else:
             print ('invalid product...')
+
+
+    def get_nav(self):
+
+        conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
+        conn.request('POST', '/GainCapitalWebServices/Trading/TradingService.asmx', self.req_soap_get_nav.format(token=self.token), self.header_get_nav)
+        resp = str(conn.getresponse().read())
+        resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['GetMarginBlotterResponse']['GetMarginBlotterResult']
+
+        if resp_dict['Success']=='true':
+            return float(resp_dict['Output']['Margin']['MarginBalance'])
+        else:
+            return -1

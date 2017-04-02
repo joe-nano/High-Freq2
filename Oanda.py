@@ -11,13 +11,13 @@ import datetime
 import ast
 import logging
 
-
+'''
 logging.basicConfig(
         filename="/Users/MengfeiZhang/Desktop/tmp/Oanda_v20.log",
         level=logging.INFO,
         format='%(asctime)s [%(levelname)s] %(name)s : %(message)s',
     )
-
+'''
 class Oanda:
 
 
@@ -36,8 +36,8 @@ class Oanda:
             self.token=self.set_obj.get_account_token()
             para={'timeout':30}
             self.client = oandapyV20.API(access_token=self.token, environment='live', request_params=para)
-            resp_acct = accounts.AccountDetails(self.account_id)
-            self.client.request(resp_acct) #get account info
+            req_acct = accounts.AccountDetails(self.account_id)
+            self.client.request(req_acct) #get account info
             print (self.broker_name+self.ccy+' '+'connection succeeded...')
         except:
             print (self.broker_name+self.ccy+' '+'connection failed...')
@@ -81,6 +81,7 @@ class Oanda:
         except Exception as err:
 
             print ("order not executed "+str(err))
+            return -1
 
 
 
@@ -136,4 +137,12 @@ class Oanda:
 
                 return {'side':'buy','units':0, 'price': None}
 
+    def get_nav(self):
+        try:
+            req_acct = accounts.AccountDetails(self.account_id)
+            self.client.request(req_acct)
+            resp_acct=req_acct.response
+            return float(resp_acct['account']['NAV'])
+        except Exception as err:
 
+            print('Fail to get Oanda NAV: '+str(err))

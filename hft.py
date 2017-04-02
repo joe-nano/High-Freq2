@@ -78,12 +78,12 @@ ccy_dict={
 
 
 def get_boundary(ccy):
-    #set threshold to 1.5 pip
+    #set threshold to 1 pip
     if ('JPY' in ccy)==True:
-        lb=0.015
+        lb=0.01
         ub=1
     else:
-        lb=0.00015
+        lb=0.0001
         ub=1
 
     return (lb, ub)
@@ -121,7 +121,7 @@ class hft:
         self.time_stamp2=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
 
         self.num_trade=0
-        self.spread_open=0
+        self.num_neg_spread=0
         self.spread_open_act=0
         self.spread_cum=0
 
@@ -154,7 +154,7 @@ class hft:
             key_list=['datetime','ccy','amount','buysell','sprd_open','forex_quote','oanda_quote','fill_price']
             for key in key_list:
                 value_tmp=str(trd_rec[key])#.replace(',','/').replace(':','/')
-                print (str(key)+' : '+value_tmp)
+                #print (str(key)+' : '+value_tmp)
                 values+=value_tmp+','
             values=values[0:-1]
 
@@ -301,7 +301,7 @@ class hft:
                 if self.trd_enabled==True:
                     fill_price=self.buy1sell2()
                 else:
-                    fill_price={'1' : self.last_quote1['bid'], '2': self.last_quote2['ask']}
+                    fill_price={'1' : self.last_quote1['ask'], '2': self.last_quote2['bid']}
 
                 if fill_price!=-1:
 
@@ -323,15 +323,23 @@ class hft:
                         'fill_price':'\''+str(fill_price).replace('\'','')+'\''
                     }
                     self.insert_trd_rec(trd_rec)
-                    print ('cumulative open spread: '+str(self.spread_cum))
-                    print (self.ccy, 'current number of trade: '+str(self.num_trade))
-                    print ('------------------------------------------------------------')
+
+                    if self.spread_open_act<0:
+                        self.num_neg_spread+=1
+                        if self.num_neg_spread>=5:
+                            print (self.ccy, '5 consecutive negative open spread detected, trading halt for 10 min...')
+                            time.sleep(60*10) #if have 5 consecutive negative open spreads, halt trading for 10 min for that ccy
+                    else:
+                        self.num_neg_spread=0
+                    #print ('cumulative open spread: '+str(self.spread_cum))
+                    #print (self.ccy, 'current number of trade: '+str(self.num_trade))
+                    #print ('------------------------------------------------------------')
 
             elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and dt1.total_seconds()<self.ping_limit and dt2.total_seconds()<self.ping_limit and self.current_amount>-self.max_amount:
                 if self.trd_enabled==True:
                     fill_price=self.sell1buy2()
                 else:
-                    fill_price={'1' : self.last_quote1['ask'], '2': self.last_quote2['bid']}
+                    fill_price={'1' : self.last_quote1['bid'], '2': self.last_quote2['ask']}
 
                 if fill_price!=-1:
 
@@ -352,11 +360,18 @@ class hft:
                         'fill_price':'\''+str(fill_price).replace('\'','')+'\''
                     }
                     self.insert_trd_rec(trd_rec)
-                    print ('cumulative open spread: '+str(self.spread_cum))
-                    print (self.ccy, 'current number of trade: '+str(self.num_trade))
-                    print ('------------------------------------------------------------')
 
-            #print ('heartbeat('+self.ccy+') '+str(datetime.datetime.now())+'...')
+                    if self.spread_open_act<0:
+                        self.num_neg_spread+=1
+                        if self.num_neg_spread>=5:
+                            print (self.ccy, '5 consecutive negative open spread detected, trading halt for 10 min...')
+                            time.sleep(60*10) #if have 5 consecutive negative open spreads, halt trading for 10 min for that ccy
+                    else:
+                        self.num_neg_spread=0
+                    #print ('cumulative open spread: '+str(self.spread_cum))
+                    #print (self.ccy, 'current number of trade: '+str(self.num_trade))
+                    #print ('------------------------------------------------------------')
+
         except Exception as error:
             print (self.ccy, 'error encountered, error: '+str(error))
 
@@ -364,7 +379,11 @@ class hft:
         fill_price_buy=self.broker1.make_limit_order(self.amount, 'B', self.last_quote1['ask'])
         if fill_price_buy>0:
             fill_price_sell=self.broker2.make_mkt_order(self.amount, 'sell')
-            return {'1' : fill_price_buy, '2': fill_price_sell}
+            if fill_price_sell>0:
+                return {'1' : fill_price_buy, '2': fill_price_sell}
+            else:
+                print ('Forexcom executed, Oanda not executed, restarting...')
+                self.start() #one broker is out of connection, restarting...
         else:
             return -1
 
@@ -372,7 +391,11 @@ class hft:
         fill_price_sell=self.broker1.make_limit_order(self.amount, 'S', self.last_quote1['bid'])
         if fill_price_sell>0:
             fill_price_buy=self.broker2.make_mkt_order(self.amount, 'buy')
-            return {'1' : fill_price_sell, '2': fill_price_buy}
+            if fill_price_buy>0:
+                return {'1' : fill_price_sell, '2': fill_price_buy}
+            else:
+                print ('Forexcom executed, Oanda not executed, restarting...')
+                self.start() #one broker is out of connection, restarting...
         else:
             return -1
 
@@ -425,6 +448,7 @@ class set:
 
     def get_ping_limit(self):
         return int(self.ping_limit)
+
 
 def get_hft_list(fileName_, set_obj):
     hft_list=[]

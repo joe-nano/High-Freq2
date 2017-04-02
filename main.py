@@ -8,10 +8,10 @@ from datetime import datetime
 def main(args):
 
 
-    login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_hft.csv'
-    ccy_list_file='/Users/MengfeiZhang/Desktop/tmp/hft_ccy_list.csv'
-    #login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/login_info_hft.csv'
-    #ccy_list_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/hft_ccy_list.csv'
+    #login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_hft.csv'
+    #ccy_list_file='/Users/MengfeiZhang/Desktop/tmp/hft_ccy_list.csv'
+    login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/login_info_hft.csv'
+    ccy_list_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/hft_ccy_list.csv'
 
     if sys.argv[1]=='trading':
 
@@ -48,8 +48,18 @@ def main(args):
         for thread in threads:
             thread.start()
 
+    elif sys.argv[1]=='nav':
 
+        set_obj=set(login_file)
 
+        broker1=forexcom('EUR/USD', set_obj)
+        broker2=Oanda('EUR_USD', set_obj)
+
+        while True:
+            forexcom_nav=broker1.get_nav()
+            oanda_nav=broker2.get_nav()
+            print ('Total NAV='+str(oanda_nav+forexcom_nav), 'Forex.com NAV='+str(forexcom_nav), 'Oanda NAV='+str(oanda_nav))
+            time.sleep(10)
 
 if __name__=='__main__':
     sys.exit(main(sys.argv))
