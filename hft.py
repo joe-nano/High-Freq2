@@ -10,7 +10,7 @@ import threading
 import smtplib
 from email.mime.text import MIMEText
 import socket
-import sys
+import sys, os
 import json
 import oandapyV20
 from oandapyV20 import API
@@ -78,12 +78,12 @@ ccy_dict={
 
 
 def get_boundary(ccy):
-    #set threshold to 1 pip
+
     if ('JPY' in ccy)==True:
-        lb=0.01
+        lb=0.0125
         ub=1
     else:
-        lb=0.0001
+        lb=0.00015
         ub=1
 
     return (lb, ub)
@@ -120,15 +120,16 @@ class hft:
         self.time_stamp1=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
         self.time_stamp2=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
 
-        self.num_trade=0
         self.num_neg_spread=0
         self.spread_open_act=0
-        self.spread_cum=0
 
         #configuration
         self.max_amount=set_obj.get_max_amount()
         self.amount=set_obj.get_single_amount()
         self.ping_limit=set_obj.get_ping_limit()
+        self.neg_tol=5
+        self.safe_buffer=60 #seconds
+
 
         self.current_amount=0
         self.s=None
@@ -201,11 +202,10 @@ class hft:
                             self.time_stamp1=datetime.datetime.now()
 
                             self.locker.acquire()
-                            #print (self.ccy, 'Forex.com try to execute...')
                             self.execute()
                             self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote1))
                             self.locker.release()
-                            #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ccy_live_list)
+
                 except Exception as error:
                     if ('timed' in str(error))==True:
                         print ('Forexcom '+str(self.broker2.ccy)+' connection failed...')
@@ -230,11 +230,9 @@ class hft:
                         self.time_stamp2=datetime.datetime.now()
 
                         self.locker.acquire()
-                        #print (self.ccy, 'Oanda try to execute...')
                         self.execute()
                         self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
                         self.locker.release()
-                        #print (broker+' '+datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ticks)
                         
             except Exception as error:
                 if ('timed' in str(error))==True or ('Max' in str(error))==True:
@@ -306,8 +304,6 @@ class hft:
                 if fill_price!=-1:
 
                     self.spread_open_act=fill_price['2']-fill_price['1']
-                    self.spread_cum+=self.spread_open_act
-                    self.num_trade+=1
                     self.current_amount+=self.amount #relative to broker1
 
                     time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -326,14 +322,11 @@ class hft:
 
                     if self.spread_open_act<0:
                         self.num_neg_spread+=1
-                        if self.num_neg_spread>=5:
-                            print (self.ccy, '5 consecutive negative open spread detected, trading halt for 10 min...')
-                            time.sleep(60*10) #if have 5 consecutive negative open spreads, halt trading for 10 min for that ccy
+                        if self.num_neg_spread>=self.neg_tol:
+                            time.sleep(self.safe_buffer) #half trading temporarily if there are too many consecutive negative open spreads
                     else:
                         self.num_neg_spread=0
-                    #print ('cumulative open spread: '+str(self.spread_cum))
-                    #print (self.ccy, 'current number of trade: '+str(self.num_trade))
-                    #print ('------------------------------------------------------------')
+
 
             elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and dt1.total_seconds()<self.ping_limit and dt2.total_seconds()<self.ping_limit and self.current_amount>-self.max_amount:
                 if self.trd_enabled==True:
@@ -344,8 +337,6 @@ class hft:
                 if fill_price!=-1:
 
                     self.spread_open_act=fill_price['1']-fill_price['2']
-                    self.spread_cum+=self.spread_open_act
-                    self.num_trade+=1
                     self.current_amount-=self.amount
 
                     time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -363,14 +354,11 @@ class hft:
 
                     if self.spread_open_act<0:
                         self.num_neg_spread+=1
-                        if self.num_neg_spread>=5:
-                            print (self.ccy, '5 consecutive negative open spread detected, trading halt for 10 min...')
-                            time.sleep(60*10) #if have 5 consecutive negative open spreads, halt trading for 10 min for that ccy
+                        if self.num_neg_spread>=self.neg_tol:
+                            time.sleep(self.safe_buffer) #half trading temporarily if there are too many consecutive negative open spreads
                     else:
                         self.num_neg_spread=0
-                    #print ('cumulative open spread: '+str(self.spread_cum))
-                    #print (self.ccy, 'current number of trade: '+str(self.num_trade))
-                    #print ('------------------------------------------------------------')
+
 
         except Exception as error:
             print (self.ccy, 'error encountered, error: '+str(error))
@@ -382,8 +370,8 @@ class hft:
             if fill_price_sell>0:
                 return {'1' : fill_price_buy, '2': fill_price_sell}
             else:
-                print ('Forexcom executed, Oanda not executed, restarting...')
-                self.start() #one broker is out of connection, restarting...
+                self.broker1.close_position() #if Oanda not executed, close Forex's position
+                return -1
         else:
             return -1
 
@@ -394,8 +382,8 @@ class hft:
             if fill_price_buy>0:
                 return {'1' : fill_price_sell, '2': fill_price_buy}
             else:
-                print ('Forexcom executed, Oanda not executed, restarting...')
-                self.start() #one broker is out of connection, restarting...
+                self.broker1.close_position() #if Oanda not executed, close Forex's position
+                return -1
         else:
             return -1
 
@@ -423,6 +411,8 @@ class set:
                     self.single_amt=row[0]
                 elif i==7:
                     self.ping_limit=row[0]
+                elif i==8:
+                    self.max_loss=row[0]
                 i+=1
 
         finally:
@@ -449,6 +439,9 @@ class set:
     def get_ping_limit(self):
         return int(self.ping_limit)
 
+    def get_max_loss(self):
+        return float(self.max_loss)
+
 
 def get_hft_list(fileName_, set_obj):
     hft_list=[]
@@ -466,5 +459,24 @@ def get_hft_list(fileName_, set_obj):
         file.close()
     return hft_list
 
+
+def safe_check(set_obj):
+    print ('Safe checking started...')
+    broker1=forexcom('dummy', set_obj)
+    broker2=Oanda('dummy', set_obj)
+    timer=5
+    time_cum=0
+
+    init_nav=broker1.get_nav()+broker2.get_nav()
+    while True:
+        current_nav=broker1.get_nav()+broker2.get_nav()
+        if current_nav-init_nav>-set_obj.get_max_loss():
+            time_cum+=timer
+            if time_cum>=3600:
+                init_nav=current_nav
+                time_cum=0
+            time.sleep(timer)
+        else:
+            os._exit(0) #if loss>max loss limit exit the entire program
 
 

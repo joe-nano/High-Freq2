@@ -260,22 +260,6 @@ class forexcom:
             time.sleep(5)
             self.connect()
 
-
-    '''
-    def make_mkt_order(self, amount, side):
-        req=urllib.parse.urlencode({'Token': self.token,
-                            'Product': self.ccy,
-                            'BuySell':side,
-                            'Amount': amount})
-
-        conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
-        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx/DealRequestAtBest', req, headers)
-        resp = str(conn.getresponse().read())
-        resp_dict=xml2dict(resp)
-
-        return float(resp_dict['rate'])
-    '''
-
     def make_limit_order(self, amount, side, prc):
 
         conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)

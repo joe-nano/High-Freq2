@@ -23,6 +23,8 @@ def main(args):
 
         threads=[]
 
+        threads.append(threading.Thread(target=safe_check,args=[set_obj])) #check if nav down too much
+
         for hft_obj in hft_list:
             threads.append(threading.Thread(target=hft_obj.start(),args=None))
 
@@ -33,9 +35,7 @@ def main(args):
 
         set_obj=set(login_file)
 
-        #start trading
-
-        ccy_list=['GBP_USD','GBP_JPY'] #list of ccy want to close
+        ccy_list=['EUR_USD','GBP_USD','USD_JPY'] #list of ccy want to close
         hft_list=[]
         for ccy in ccy_list:
             hft_list.append(hft(ccy, True, set_obj))
@@ -52,8 +52,8 @@ def main(args):
 
         set_obj=set(login_file)
 
-        broker1=forexcom('EUR/USD', set_obj)
-        broker2=Oanda('EUR_USD', set_obj)
+        broker1=forexcom('dummy', set_obj)
+        broker2=Oanda('dummy', set_obj)
 
         while True:
             forexcom_nav=broker1.get_nav()
