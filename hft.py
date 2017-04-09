@@ -481,6 +481,7 @@ def safe_check(set_obj):
                 os._exit(0) #if loss>max loss limit exit the entire program
 
         except:
+            time.sleep(5)
             safe_check(set_obj)
 
 
