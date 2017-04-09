@@ -470,8 +470,8 @@ def safe_check(set_obj):
     init_nav=broker1.get_nav()+broker2.get_nav()
     while True:
         current_nav=broker1.get_nav()+broker2.get_nav()
+        time_cum+=timer
         if current_nav-init_nav>-set_obj.get_max_loss():
-            time_cum+=timer
             if time_cum>=3600:
                 init_nav=current_nav
                 time_cum=0
