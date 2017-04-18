@@ -108,6 +108,7 @@ class hft:
         self.broker1=forexcom(o2f(ccy), set_obj)
         self.broker2=Oanda(ccy, set_obj)
         self.trd_enabled=trd_enabled
+        self.set_obj=set_obj
 
         self.ccy=ccy #in XXX_YYY format
         self.locker=threading.Lock()
@@ -233,6 +234,11 @@ class hft:
                         self.execute()
                         self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
                         self.locker.release()
+
+                        dt=self.time_stamp2-self.time_stamp1
+                        if dt.total_seconds()>60: #check whether forex.com is dead or not
+                            self.broker1.connect()
+                            self.trading('Forexcom')
                         
             except Exception as error:
                 if ('timed' in str(error))==True or ('Max' in str(error))==True:
@@ -323,7 +329,7 @@ class hft:
                     if self.spread_open_act<0:
                         self.num_neg_spread+=1
                         if self.num_neg_spread>=self.neg_tol:
-                            time.sleep(self.safe_buffer) #half trading temporarily if there are too many consecutive negative open spreads
+                            time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
                     else:
                         self.num_neg_spread=0
 
@@ -355,7 +361,7 @@ class hft:
                     if self.spread_open_act<0:
                         self.num_neg_spread+=1
                         if self.num_neg_spread>=self.neg_tol:
-                            time.sleep(self.safe_buffer) #half trading temporarily if there are too many consecutive negative open spreads
+                            time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
                     else:
                         self.num_neg_spread=0
 
@@ -371,6 +377,7 @@ class hft:
                 return {'1' : fill_price_buy, '2': fill_price_sell}
             else:
                 self.broker1.close_position() #if Oanda not executed, close Forex's position
+                send_hotmail('Execution error ('+self.ccy+'):', {'msg':'Oanda not executed'}, self.set_obj)
                 return -1
         else:
             return -1
@@ -383,6 +390,7 @@ class hft:
                 return {'1' : fill_price_sell, '2': fill_price_buy}
             else:
                 self.broker1.close_position() #if Oanda not executed, close Forex's position
+                send_hotmail('Execution error ('+self.ccy+'):', {'msg':'Oanda not executed'}, self.set_obj)
                 return -1
         else:
             return -1
@@ -406,12 +414,16 @@ class set:
                 elif i==4:
                     self.account_token=row[0]
                 elif i==5:
-                    self.max_amt=row[0]
+                    self.email_login=row[0]
                 elif i==6:
-                    self.single_amt=row[0]
+                    self.email_pwd=row[0]
                 elif i==7:
-                    self.ping_limit=row[0]
+                    self.max_amt=row[0]
                 elif i==8:
+                    self.single_amt=row[0]
+                elif i==9:
+                    self.ping_limit=row[0]
+                elif i==10:
                     self.max_loss=row[0]
                 i+=1
 
@@ -429,6 +441,12 @@ class set:
 
     def get_account_pwd(self):
         return str(self.account_pwd)
+
+    def get_email_login(self):
+        return str(self.email_login)
+
+    def get_email_pwd(self):
+        return str(self.email_pwd)
 
     def get_max_amount(self):
         return int(self.max_amt)
@@ -471,6 +489,7 @@ def safe_check(set_obj):
     while True:
         try:
             current_nav=broker1.get_nav()+broker2.get_nav()
+            #print ('current NAV: '+str(current_nav)) #for debugging
             time_cum+=timer
             if current_nav-init_nav>-set_obj.get_max_loss():
                 if time_cum>=3600:
@@ -485,3 +504,25 @@ def safe_check(set_obj):
             safe_check(set_obj)
 
 
+def send_hotmail(subject, content, set_obj):
+    msg_txt=format_email_dict(content)
+    from_email={'login': set_obj.get_email_login(), 'pwd': set_obj.get_email_pwd()}
+    to_email='finatos@me.com'
+
+    msg=MIMEText(msg_txt)
+    msg['Subject'] = subject
+    msg['From'] = from_email['login']
+    msg['To'] = to_email
+    mail=smtplib.SMTP('smtp.live.com',25)
+    mail.ehlo()
+    mail.starttls()
+    mail.login(from_email['login'], from_email['pwd'])
+    mail.sendmail(from_email['login'], to_email, msg.as_string())
+    mail.close()
+
+
+def format_email_dict(content):
+    content_tmp=''
+    for item in content.keys():
+        content_tmp+=str(item)+':'+str(content[item])+'\r\n'
+    return content_tmp
