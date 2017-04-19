@@ -120,6 +120,7 @@ class hft:
         self.last_quote2={'ask':-999999,'bid':-999999}
         self.time_stamp1=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
         self.time_stamp2=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
+        self.time_stamp_bad=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
 
         self.num_neg_spread=0
         self.spread_open_act=0
@@ -234,11 +235,6 @@ class hft:
                         self.execute()
                         self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
                         self.locker.release()
-
-                        dt=self.time_stamp2-self.time_stamp1
-                        if dt.total_seconds()>60: #check whether forex.com is dead or not
-                            self.broker1.connect()
-                            self.trading('Forexcom')
                         
             except Exception as error:
                 if ('timed' in str(error))==True or ('Max' in str(error))==True:
@@ -301,6 +297,11 @@ class hft:
             trading_time=datetime.datetime.now()
             dt1=trading_time-self.time_stamp1
             dt2=trading_time-self.time_stamp2
+            dt_bad=trading_time-self.time_stamp_bad
+
+            if self.trd_enabled==False and dt_bad.total_seconds()>self.safe_buffer and dt_bad.total_seconds()<10*self.safe_buffer:
+                self.trd_enabled=True
+
             if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and dt1.total_seconds()<self.ping_limit and dt2.total_seconds()<self.ping_limit and self.current_amount<self.max_amount:
                 if self.trd_enabled==True:
                     fill_price=self.buy1sell2()
@@ -329,7 +330,9 @@ class hft:
                     if self.spread_open_act<0:
                         self.num_neg_spread+=1
                         if self.num_neg_spread>=self.neg_tol:
-                            time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
+                            self.trd_enabled=False
+                            self.time_stamp_bad=datetime.datetime.now()
+                            #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
                     else:
                         self.num_neg_spread=0
 
@@ -361,7 +364,9 @@ class hft:
                     if self.spread_open_act<0:
                         self.num_neg_spread+=1
                         if self.num_neg_spread>=self.neg_tol:
-                            time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
+                            self.trd_enabled=False
+                            self.time_stamp_bad=datetime.datetime.now()
+                            #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
                     else:
                         self.num_neg_spread=0
 
