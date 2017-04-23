@@ -127,7 +127,8 @@ class hft:
 
         #configuration
         self.max_amount=set_obj.get_max_amount()
-        self.amount=set_obj.get_single_amount()
+        self.amount=set_obj.get_single_amount() #min amount
+        self.trd_amount=0
         self.ping_limit=set_obj.get_ping_limit()
         self.neg_tol=5
         self.safe_buffer=60 #seconds
@@ -290,6 +291,31 @@ class hft:
             self.broker2.close_position()
 
 
+    def get_trd_amount(self, sprd, dir):
+
+        avl_amount=0
+
+        if dir=='1': #buy more forex.com
+
+            avl_amount=self.max_amount-self.current_amount
+
+        elif dir=='2': #buy more Oanda
+
+            avl_amount=self.current_amount+self.max_amount
+
+
+        if sprd<=1.5*self.bd[0]:
+
+            self.trd_amount=min(avl_amount, self.amount) #base amount
+
+        elif sprd>1.5*self.bd[0] and sprd<=2*self.bd[0]:
+
+            self.trd_amount=min(avl_amount, 1.5*self.amount) #base amount X 1.5
+
+        elif sprd>2*self.bd[0]:
+
+            self.trd_amount=min(avl_amount, 2*self.amount) #base amount X 2
+
 
     def execute(self):
         try:
@@ -303,81 +329,91 @@ class hft:
                 self.trd_enabled=True
 
             if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and dt1.total_seconds()<self.ping_limit and dt2.total_seconds()<self.ping_limit and self.current_amount<self.max_amount:
-                if self.trd_enabled==True:
-                    fill_price=self.buy1sell2()
-                else:
-                    fill_price={'1' : self.last_quote1['ask'], '2': self.last_quote2['bid']}
 
-                if fill_price!=-1:
+                self.get_trd_amount(self.last_quote2['bid']-self.last_quote1['ask'], '1') #calculate trade amount
 
-                    self.spread_open_act=fill_price['2']-fill_price['1']
-                    self.current_amount+=self.amount #relative to broker1
+                if self.trd_amount!=0: #if it is zero, then no need to trade
 
-                    time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                    trd_rec={
-                        'datetime':'\''+time_now+'\'',
-                        'ccy':'\''+self.ccy+'\'',
-                        'amount':self.amount,
-                        'buysell':'\''+'buy Forex.com/sell Oanda'+'\'',
-                        'sprd_open':self.spread_open_act,
-                        'forex_quote':'\''+str(self.last_quote1).replace('\'','')+'\'',
-                        'oanda_quote':'\''+str(self.last_quote2).replace('\'','')+'\'',
-                        'fill_price':'\''+str(fill_price).replace('\'','')+'\''
-                    }
-                    self.insert_trd_rec(trd_rec)
-
-                    if self.spread_open_act<0:
-                        self.num_neg_spread+=1
-                        if self.num_neg_spread>=self.neg_tol:
-                            self.trd_enabled=False
-                            self.time_stamp_bad=datetime.datetime.now()
-                            #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
+                    if self.trd_enabled==True:
+                        fill_price=self.buy1sell2()
                     else:
-                        self.num_neg_spread=0
+                        fill_price={'1' : self.last_quote1['ask'], '2': self.last_quote2['bid']}
+
+                    if fill_price!=-1:
+
+                        self.spread_open_act=fill_price['2']-fill_price['1']
+                        self.current_amount+=self.trd_amount #relative to broker1
+
+                        time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                        trd_rec={
+                            'datetime':'\''+time_now+'\'',
+                            'ccy':'\''+self.ccy+'\'',
+                            'amount':self.trd_amount,
+                            'buysell':'\''+'buy Forex.com/sell Oanda'+'\'',
+                            'sprd_open':self.spread_open_act,
+                            'forex_quote':'\''+str(self.last_quote1).replace('\'','')+'\'',
+                            'oanda_quote':'\''+str(self.last_quote2).replace('\'','')+'\'',
+                            'fill_price':'\''+str(fill_price).replace('\'','')+'\''
+                        }
+                        self.insert_trd_rec(trd_rec)
+
+                        if self.spread_open_act<0:
+                            self.num_neg_spread+=1
+                            if self.num_neg_spread>=self.neg_tol:
+                                self.trd_enabled=False
+                                self.time_stamp_bad=datetime.datetime.now()
+                                #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
+                        else:
+                            self.num_neg_spread=0
 
 
             elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and dt1.total_seconds()<self.ping_limit and dt2.total_seconds()<self.ping_limit and self.current_amount>-self.max_amount:
-                if self.trd_enabled==True:
-                    fill_price=self.sell1buy2()
-                else:
-                    fill_price={'1' : self.last_quote1['bid'], '2': self.last_quote2['ask']}
 
-                if fill_price!=-1:
+                self.get_trd_amount(self.last_quote1['bid']-self.last_quote2['ask'], '2') #calculate trade amount
 
-                    self.spread_open_act=fill_price['1']-fill_price['2']
-                    self.current_amount-=self.amount
+                if self.trd_amount!=0: #if it is zero, then no need to trade
 
-                    time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    trd_rec={
-                        'datetime':'\''+time_now+'\'',
-                        'ccy':'\''+self.ccy+'\'',
-                        'amount':-self.amount,
-                        'buysell':'\''+'sell Forex.com/buy Oanda'+'\'',
-                        'sprd_open':self.spread_open_act,
-                        'forex_quote':'\''+str(self.last_quote1).replace('\'','')+'\'',
-                        'oanda_quote':'\''+str(self.last_quote2).replace('\'','')+'\'',
-                        'fill_price':'\''+str(fill_price).replace('\'','')+'\''
-                    }
-                    self.insert_trd_rec(trd_rec)
-
-                    if self.spread_open_act<0:
-                        self.num_neg_spread+=1
-                        if self.num_neg_spread>=self.neg_tol:
-                            self.trd_enabled=False
-                            self.time_stamp_bad=datetime.datetime.now()
-                            #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
+                    if self.trd_enabled==True:
+                        fill_price=self.sell1buy2()
                     else:
-                        self.num_neg_spread=0
+                        fill_price={'1' : self.last_quote1['bid'], '2': self.last_quote2['ask']}
+
+                    if fill_price!=-1:
+
+                        self.spread_open_act=fill_price['1']-fill_price['2']
+                        self.current_amount-=self.trd_amount
+
+                        time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        trd_rec={
+                            'datetime':'\''+time_now+'\'',
+                            'ccy':'\''+self.ccy+'\'',
+                            'amount':-self.trd_amount,
+                            'buysell':'\''+'sell Forex.com/buy Oanda'+'\'',
+                            'sprd_open':self.spread_open_act,
+                            'forex_quote':'\''+str(self.last_quote1).replace('\'','')+'\'',
+                            'oanda_quote':'\''+str(self.last_quote2).replace('\'','')+'\'',
+                            'fill_price':'\''+str(fill_price).replace('\'','')+'\''
+                        }
+                        self.insert_trd_rec(trd_rec)
+
+                        if self.spread_open_act<0:
+                            self.num_neg_spread+=1
+                            if self.num_neg_spread>=self.neg_tol:
+                                self.trd_enabled=False
+                                self.time_stamp_bad=datetime.datetime.now()
+                                #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
+                        else:
+                            self.num_neg_spread=0
 
 
         except Exception as error:
             print (self.ccy, 'error encountered, error: '+str(error))
 
     def buy1sell2(self):
-        fill_price_buy=self.broker1.make_limit_order(self.amount, 'B', self.last_quote1['ask'])
+        fill_price_buy=self.broker1.make_limit_order(self.trd_amount, 'B', self.last_quote1['ask'])
         if fill_price_buy>0:
-            fill_price_sell=self.broker2.make_mkt_order(self.amount, 'sell')
+            fill_price_sell=self.broker2.make_mkt_order(self.trd_amount, 'sell')
             if fill_price_sell>0:
                 return {'1' : fill_price_buy, '2': fill_price_sell}
             else:
@@ -388,9 +424,9 @@ class hft:
             return -1
 
     def sell1buy2(self):
-        fill_price_sell=self.broker1.make_limit_order(self.amount, 'S', self.last_quote1['bid'])
+        fill_price_sell=self.broker1.make_limit_order(self.trd_amount, 'S', self.last_quote1['bid'])
         if fill_price_sell>0:
-            fill_price_buy=self.broker2.make_mkt_order(self.amount, 'buy')
+            fill_price_buy=self.broker2.make_mkt_order(self.trd_amount, 'buy')
             if fill_price_buy>0:
                 return {'1' : fill_price_sell, '2': fill_price_buy}
             else:

@@ -34,7 +34,7 @@ def insert_trd_rec(conn, dict):
 
 
 def main(args):
-
+    '''
     conn= connect(host='localhost',
                       user='root',
                       passwd='891124',
@@ -51,6 +51,8 @@ def main(args):
     }
 
     insert_trd_rec(conn,dict)
+    '''
+    print(min(100,50))
 
 if __name__=='__main__':
     sys.exit(main(sys.argv))
