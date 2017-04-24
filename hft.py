@@ -538,6 +538,7 @@ def safe_check(set_obj):
                     time_cum=0
                 time.sleep(timer)
             else:
+                send_hotmail('Loss exceeds max limit', {'msg':'All threads stopped'}, set_obj)
                 os._exit(0) #if loss>max loss limit exit the entire program
 
         except:
