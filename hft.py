@@ -291,30 +291,25 @@ class hft:
             self.broker2.close_position()
 
 
-    def get_trd_amount(self, sprd, dir):
+    def get_trd_amount(self, sprd, dir):  
 
         avl_amount=0
 
         if dir=='1': #buy more forex.com
-
             avl_amount=self.max_amount-self.current_amount
-
         elif dir=='2': #buy more Oanda
-
             avl_amount=self.current_amount+self.max_amount
 
-
-        if sprd<=1.5*self.bd[0]:
-
+        '''
+        if sprd<=2*self.bd[0]:
             self.trd_amount=min(avl_amount, self.amount) #base amount
-
-        elif sprd>1.5*self.bd[0] and sprd<=2*self.bd[0]:
-
-            self.trd_amount=min(avl_amount, 1.5*self.amount) #base amount X 1.5
-
-        elif sprd>2*self.bd[0]:
-
+        elif sprd>2*self.bd[0] and sprd<=3*self.bd[0]:
             self.trd_amount=min(avl_amount, 2*self.amount) #base amount X 2
+        elif sprd>3*self.bd[0]:
+            self.trd_amount=avl_amount #all available amount
+        '''
+
+        self.trd_amount=avl_amount #all available amount
 
 
     def execute(self):
@@ -519,7 +514,7 @@ def get_hft_list(fileName_, set_obj):
     return hft_list
 
 
-def safe_check(set_obj):
+def monitor(set_obj):
     print ('Safe checking started...')
     broker1=forexcom('dummy', set_obj)
     broker2=Oanda('dummy', set_obj)
@@ -532,7 +527,7 @@ def safe_check(set_obj):
             current_nav=broker1.get_nav()+broker2.get_nav()
             #print ('current NAV: '+str(current_nav)) #for debugging
             time_cum+=timer
-            if current_nav-init_nav>-set_obj.get_max_loss():
+            if current_nav-init_nav>-set_obj.get_max_loss() or current_nav-init_nav<-1.5*set_obj.get_max_loss():
                 if time_cum>=3600:
                     init_nav=current_nav
                     time_cum=0
@@ -543,7 +538,7 @@ def safe_check(set_obj):
 
         except:
             time.sleep(5)
-            safe_check(set_obj)
+            monitor(set_obj)
 
 
 def send_hotmail(subject, content, set_obj):
