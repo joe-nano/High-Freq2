@@ -211,6 +211,7 @@ class hft:
 
                 except Exception as error:
                     if ('timed' in str(error))==True:
+                        self.s.close() #disconnect first
                         print ('Forexcom '+str(self.broker2.ccy)+' connection failed...')
                         self.broker1.connect()
                         self.trading('Forexcom')
@@ -283,11 +284,11 @@ class hft:
             else:
                 self.current_amount=-broker1_pos_info['units']
 
-        elif broker1_pos_info['units']!=0: #only one account has open position, close it
+        elif broker1_pos_info['units']!=0 and self.trd_enabled==True: #only one account has open position, close it
             self.broker1.close_position()
 
 
-        elif broker2_pos_info['units']!=0:
+        elif broker2_pos_info['units']!=0 and self.trd_enabled==True:
             self.broker2.close_position()
 
 
@@ -300,16 +301,13 @@ class hft:
         elif dir=='2': #buy more Oanda
             avl_amount=self.current_amount+self.max_amount
 
-        '''
-        if sprd<=2*self.bd[0]:
-            self.trd_amount=min(avl_amount, self.amount) #base amount
-        elif sprd>2*self.bd[0] and sprd<=3*self.bd[0]:
-            self.trd_amount=min(avl_amount, 2*self.amount) #base amount X 2
-        elif sprd>3*self.bd[0]:
-            self.trd_amount=avl_amount #all available amount
-        '''
 
-        self.trd_amount=avl_amount #all available amount
+        if sprd<=1.25*self.bd[0]:
+            self.trd_amount=min(avl_amount, self.amount) #base amount
+        elif sprd>1.25*self.bd[0]:
+            self.trd_amount=avl_amount #all available amount
+
+        #self.trd_amount=avl_amount #all available amount
 
 
     def execute(self):
@@ -515,26 +513,31 @@ def get_hft_list(fileName_, set_obj):
 
 
 def monitor(set_obj):
-    print ('Safe checking started...')
+    print ('Monitor started...')
     broker1=forexcom('dummy', set_obj)
     broker2=Oanda('dummy', set_obj)
     timer=5
     time_cum=0
 
     init_nav=broker1.get_nav()+broker2.get_nav()
+    prev_nav=init_nav
     while True:
         try:
             current_nav=broker1.get_nav()+broker2.get_nav()
             #print ('current NAV: '+str(current_nav)) #for debugging
             time_cum+=timer
-            if current_nav-init_nav>-set_obj.get_max_loss() or current_nav-init_nav<-1.5*set_obj.get_max_loss():
+            if current_nav-init_nav>-set_obj.get_max_loss():
                 if time_cum>=3600:
                     init_nav=current_nav
                     time_cum=0
+                prev_nav=current_nav
                 time.sleep(timer)
             else:
-                send_hotmail('Loss exceeds max limit', {'msg':'All threads stopped'}, set_obj)
-                os._exit(0) #if loss>max loss limit exit the entire program
+                if current_nav-prev_nav>-set_obj.get_max_loss():
+                    send_hotmail('Loss exceeds max limit', {'msg':'All threads stopped'}, set_obj)
+                    os._exit(0) #if loss>max loss limit exit the entire program
+                else: # withdraw
+                    init_nav=current_nav
 
         except:
             time.sleep(5)
