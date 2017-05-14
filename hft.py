@@ -80,7 +80,7 @@ ccy_dict={
 def get_boundary(ccy):
 
     if ('JPY' in ccy)==True:
-        lb=0.0125
+        lb=0.02 #Prob{spread>0.02}<20%
         ub=1
     else:
         lb=0.00015
@@ -301,13 +301,13 @@ class hft:
         elif dir=='2': #buy more Oanda
             avl_amount=self.current_amount+self.max_amount
 
-
+        '''
         if sprd<=1.25*self.bd[0]:
             self.trd_amount=min(avl_amount, self.amount) #base amount
         elif sprd>1.25*self.bd[0]:
             self.trd_amount=avl_amount #all available amount
-
-        #self.trd_amount=avl_amount #all available amount
+        '''
+        self.trd_amount=avl_amount #all available amount
 
 
     def execute(self):
