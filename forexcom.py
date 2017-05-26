@@ -12,6 +12,7 @@ from email.mime.text import MIMEText
 import socket
 import sys
 import json
+import random
 sys.setrecursionlimit(99999999)
 
 
@@ -92,7 +93,7 @@ class forexcom:
         self.token=None
         self.set_obj=set_obj
         self.ccy=ccy
-        self.app='MARS'
+        self.app=str(int(random.uniform(0,99999999)))
 
 
         self.header_aut={

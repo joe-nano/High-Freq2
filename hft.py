@@ -277,19 +277,22 @@ class hft:
         broker2_pos_info=self.broker2.get_position()
 
         #check current open position:
-        if broker1_pos_info['units']!=0 and broker2_pos_info['units']!=0: #both account has open position
+        if broker1_pos_info['units']==broker2_pos_info['units']: #if amount are the same in two accounts
 
             if broker1_pos_info['side']=='buy':
                 self.current_amount=broker1_pos_info['units']
             else:
                 self.current_amount=-broker1_pos_info['units']
 
-        elif broker1_pos_info['units']!=0 and self.trd_enabled==True: #only one account has open position, close it
-            self.broker1.close_position()
+        else: #if amount are not the same in two account close all
+            if broker2_pos_info['units']==0:
+                self.broker1.close_position()
+            elif broker1_pos_info['units']==0:
+                self.broker2.close_position()
+            else:
+                self.close_position()
 
-
-        elif broker2_pos_info['units']!=0 and self.trd_enabled==True:
-            self.broker2.close_position()
+            send_hotmail('Unbalanced position ('+self.ccy+'):', {'msg':' Position closed out'}, self.set_obj)
 
 
     def get_trd_amount(self, sprd, dir):  
@@ -321,7 +324,8 @@ class hft:
             if self.trd_enabled==False and dt_bad.total_seconds()>self.safe_buffer and dt_bad.total_seconds()<10*self.safe_buffer:
                 self.trd_enabled=True
 
-            if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] and dt1.total_seconds()<self.ping_limit and dt2.total_seconds()<self.ping_limit and self.current_amount<self.max_amount:
+            if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
+                    and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount<self.max_amount:
 
                 self.get_trd_amount(self.last_quote2['bid']-self.last_quote1['ask'], '1') #calculate trade amount
 
@@ -361,7 +365,8 @@ class hft:
                             self.num_neg_spread=0
 
 
-            elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] and dt1.total_seconds()<self.ping_limit and dt2.total_seconds()<self.ping_limit and self.current_amount>-self.max_amount:
+            elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
+                    and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount>-self.max_amount:
 
                 self.get_trd_amount(self.last_quote1['bid']-self.last_quote2['ask'], '2') #calculate trade amount
 
@@ -410,7 +415,7 @@ class hft:
             if fill_price_sell>0:
                 return {'1' : fill_price_buy, '2': fill_price_sell}
             else:
-                self.broker1.close_position() #if Oanda not executed, close Forex's position
+                self.close_position()
                 send_hotmail('Execution error ('+self.ccy+'):', {'msg':'Oanda not executed'}, self.set_obj)
                 return -1
         else:
@@ -423,7 +428,7 @@ class hft:
             if fill_price_buy>0:
                 return {'1' : fill_price_sell, '2': fill_price_buy}
             else:
-                self.broker1.close_position() #if Oanda not executed, close Forex's position
+                self.close_position()
                 send_hotmail('Execution error ('+self.ccy+'):', {'msg':'Oanda not executed'}, self.set_obj)
                 return -1
         else:
