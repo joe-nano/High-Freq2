@@ -80,7 +80,7 @@ ccy_dict={
 def get_boundary(ccy):
 
     if ('JPY' in ccy)==True:
-        lb=0.02 #Prob{spread>0.02}<20%
+        lb=0.018 #Prob{spread>0.02}<20%
         ub=1
     else:
         lb=0.00015
@@ -324,12 +324,15 @@ class hft:
             if self.trd_enabled==False and dt_bad.total_seconds()>self.safe_buffer and dt_bad.total_seconds()<10*self.safe_buffer:
                 self.trd_enabled=True
 
-            if (self.last_quote2['bid']-self.last_quote1['ask'])>self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
+            if (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount<self.max_amount:
 
                 self.get_trd_amount(self.last_quote2['bid']-self.last_quote1['ask'], '1') #calculate trade amount
 
                 if self.trd_amount!=0: #if it is zero, then no need to trade
+
+                    last_quote1_snap=self.last_quote1
+                    last_quote2_snap=self.last_quote2
 
                     if self.trd_enabled==True:
                         fill_price=self.buy1sell2()
@@ -349,8 +352,8 @@ class hft:
                             'amount':self.trd_amount,
                             'buysell':'\''+'buy Forex.com/sell Oanda'+'\'',
                             'sprd_open':self.spread_open_act,
-                            'forex_quote':'\''+str(self.last_quote1).replace('\'','')+'\'',
-                            'oanda_quote':'\''+str(self.last_quote2).replace('\'','')+'\'',
+                            'forex_quote':'\''+str(last_quote1_snap).replace('\'','')+'\'',
+                            'oanda_quote':'\''+str(last_quote2_snap).replace('\'','')+'\'',
                             'fill_price':'\''+str(fill_price).replace('\'','')+'\''
                         }
                         self.insert_trd_rec(trd_rec)
@@ -365,12 +368,15 @@ class hft:
                             self.num_neg_spread=0
 
 
-            elif  (self.last_quote1['bid']-self.last_quote2['ask'])>self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
+            elif  (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount>-self.max_amount:
 
                 self.get_trd_amount(self.last_quote1['bid']-self.last_quote2['ask'], '2') #calculate trade amount
 
                 if self.trd_amount!=0: #if it is zero, then no need to trade
+
+                    last_quote1_snap=self.last_quote1
+                    last_quote2_snap=self.last_quote2
 
                     if self.trd_enabled==True:
                         fill_price=self.sell1buy2()
@@ -389,8 +395,8 @@ class hft:
                             'amount':-self.trd_amount,
                             'buysell':'\''+'sell Forex.com/buy Oanda'+'\'',
                             'sprd_open':self.spread_open_act,
-                            'forex_quote':'\''+str(self.last_quote1).replace('\'','')+'\'',
-                            'oanda_quote':'\''+str(self.last_quote2).replace('\'','')+'\'',
+                            'forex_quote':'\''+str(last_quote1_snap).replace('\'','')+'\'',
+                            'oanda_quote':'\''+str(last_quote2_snap).replace('\'','')+'\'',
                             'fill_price':'\''+str(fill_price).replace('\'','')+'\''
                         }
                         self.insert_trd_rec(trd_rec)
@@ -516,6 +522,11 @@ def get_hft_list(fileName_, set_obj):
         file.close()
     return hft_list
 
+def close(ccy, set_obj):
+
+    hft_obj=hft(ccy, True, set_obj)
+    hft_obj.close_position()
+
 
 def monitor(set_obj):
     print ('Monitor started...')
@@ -531,7 +542,13 @@ def monitor(set_obj):
             current_nav=broker1.get_nav()+broker2.get_nav()
             #print ('current NAV: '+str(current_nav)) #for debugging
             time_cum+=timer
-            if current_nav-init_nav>-set_obj.get_max_loss():
+
+            weekday=datetime.datetime.today().weekday()
+            now=datetime.datetime.now()
+
+            if (int(weekday)==4 and int(now.hour)>=12): #after Friday 12pm
+                close('USD_JPY',set_obj)
+            elif current_nav-init_nav>-set_obj.get_max_loss():
                 if time_cum>=3600:
                     init_nav=current_nav
                     time_cum=0

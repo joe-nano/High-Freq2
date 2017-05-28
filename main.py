@@ -13,9 +13,9 @@ def main(args):
     login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/login_info_hft.csv'
     ccy_list_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/hft_ccy_list.csv'
 
-    if sys.argv[1]=='trading':
+    set_obj=set(login_file)
 
-        set_obj=set(login_file)
+    if sys.argv[1]=='trading':
 
         #start trading
 
@@ -31,26 +31,11 @@ def main(args):
         for thread in threads:
             thread.start()
 
-    elif sys.argv[1]=='close':
+    elif sys.argv[1]=='close': #python main.py close USD_JPY
 
-        set_obj=set(login_file)
-
-        ccy_list=['EUR_USD','GBP_USD','USD_JPY'] #list of ccy want to close
-        hft_list=[]
-        for ccy in ccy_list:
-            hft_list.append(hft(ccy, True, set_obj))
-
-        threads=[]
-
-        for hft_obj in hft_list:
-            threads.append(threading.Thread(target=hft_obj.close_position(),args=None))
-
-        for thread in threads:
-            thread.start()
+        close('USD_JPY', set_obj)
 
     elif sys.argv[1]=='nav':
-
-        set_obj=set(login_file)
 
         broker1=forexcom('dummy', set_obj)
         broker2=Oanda('dummy', set_obj)
