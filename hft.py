@@ -357,6 +357,7 @@ class hft:
                             'fill_price':'\''+str(fill_price).replace('\'','')+'\''
                         }
                         self.insert_trd_rec(trd_rec)
+                        send_hotmail('Position opened ('+self.ccy+')', trd_rec, self.set_obj)
 
                         if self.spread_open_act<0:
                             self.num_neg_spread+=1
@@ -400,6 +401,7 @@ class hft:
                             'fill_price':'\''+str(fill_price).replace('\'','')+'\''
                         }
                         self.insert_trd_rec(trd_rec)
+                        send_hotmail('Position opened ('+self.ccy+')', trd_rec, self.set_obj)
 
                         if self.spread_open_act<0:
                             self.num_neg_spread+=1
