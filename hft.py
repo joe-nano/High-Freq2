@@ -80,7 +80,7 @@ ccy_dict={
 def get_boundary(ccy):
 
     if ('JPY' in ccy)==True:
-        lb=0.018 #Prob{spread>0.02}<20%
+        lb=0.025 #Prob{spread>0.02}<20%
         ub=1
     else:
         lb=0.00015
@@ -310,7 +310,7 @@ class hft:
         elif sprd>1.25*self.bd[0]:
             self.trd_amount=avl_amount #all available amount
         '''
-        self.trd_amount=avl_amount #all available amount
+        self.trd_amount=self.amount
 
 
     def execute(self):
@@ -548,9 +548,7 @@ def monitor(set_obj):
             weekday=datetime.datetime.today().weekday()
             now=datetime.datetime.now()
 
-            if (int(weekday)==4 and int(now.hour)>=12): #after Friday 12pm
-                close('USD_JPY',set_obj)
-            elif current_nav-init_nav>-set_obj.get_max_loss():
+            if current_nav-init_nav>-set_obj.get_max_loss():
                 if time_cum>=3600:
                     init_nav=current_nav
                     time_cum=0
