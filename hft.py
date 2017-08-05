@@ -80,7 +80,7 @@ ccy_dict={
 def get_boundary(ccy):
 
     if ('JPY' in ccy)==True:
-        lb=0.025 #Prob{spread>0.02}<20%
+        lb=0.02 #Prob{spread>0.02}<20%
         ub=1
     else:
         lb=0.00015
@@ -112,8 +112,6 @@ class hft:
 
         self.ccy=ccy #in XXX_YYY format
         self.locker=threading.Lock()
-        self.is_open=None
-        self.open_type=''
 
         self.bd=get_boundary(self.ccy)
         self.last_quote1={'ask':-999999,'bid':-999999}
@@ -132,9 +130,11 @@ class hft:
         self.ping_limit=set_obj.get_ping_limit()
         self.neg_tol=5
         self.safe_buffer=60 #seconds
+        self.trd_hour=range(3,14)
 
 
         self.current_amount=0
+        self.profit=0
         self.s=None
         self.stream_queue=queue.Queue()
 
@@ -155,7 +155,7 @@ class hft:
             cur=self.conn_db.cursor()
 
             values=''
-            key_list=['datetime','ccy','amount','buysell','sprd_open','forex_quote','oanda_quote','fill_price']
+            key_list=['datetime','ccy','amount','buysell','sprd_open','forex_quote','oanda_quote','fill_price','profit']
             for key in key_list:
                 value_tmp=str(trd_rec[key])#.replace(',','/').replace(':','/')
                 #print (str(key)+' : '+value_tmp)
@@ -304,12 +304,6 @@ class hft:
         elif dir=='2': #buy more Oanda
             avl_amount=self.current_amount+self.max_amount
 
-        '''
-        if sprd<=1.25*self.bd[0]:
-            self.trd_amount=min(avl_amount, self.amount) #base amount
-        elif sprd>1.25*self.bd[0]:
-            self.trd_amount=avl_amount #all available amount
-        '''
         self.trd_amount=self.amount
 
 
@@ -324,7 +318,7 @@ class hft:
             if self.trd_enabled==False and dt_bad.total_seconds()>self.safe_buffer and dt_bad.total_seconds()<10*self.safe_buffer:
                 self.trd_enabled=True
 
-            if (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
+            if (trading_time.hour in self.trd_hour) and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount<self.max_amount:
 
                 self.get_trd_amount(self.last_quote2['bid']-self.last_quote1['ask'], '1') #calculate trade amount
@@ -343,6 +337,7 @@ class hft:
 
                         self.spread_open_act=fill_price['2']-fill_price['1']
                         self.current_amount+=self.trd_amount #relative to broker1
+                        self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.00005
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -354,7 +349,8 @@ class hft:
                             'sprd_open':self.spread_open_act,
                             'forex_quote':'\''+str(last_quote1_snap).replace('\'','')+'\'',
                             'oanda_quote':'\''+str(last_quote2_snap).replace('\'','')+'\'',
-                            'fill_price':'\''+str(fill_price).replace('\'','')+'\''
+                            'fill_price':'\''+str(fill_price).replace('\'','')+'\'',
+                            'profit':self.profit
                         }
                         self.insert_trd_rec(trd_rec)
                         send_hotmail('Position opened ('+self.ccy+')', trd_rec, self.set_obj)
@@ -369,7 +365,7 @@ class hft:
                             self.num_neg_spread=0
 
 
-            elif  (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
+            elif  (trading_time.hour in self.trd_hour) and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount>-self.max_amount:
 
                 self.get_trd_amount(self.last_quote1['bid']-self.last_quote2['ask'], '2') #calculate trade amount
@@ -388,6 +384,7 @@ class hft:
 
                         self.spread_open_act=fill_price['1']-fill_price['2']
                         self.current_amount-=self.trd_amount
+                        self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.00005
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         trd_rec={
@@ -398,7 +395,8 @@ class hft:
                             'sprd_open':self.spread_open_act,
                             'forex_quote':'\''+str(last_quote1_snap).replace('\'','')+'\'',
                             'oanda_quote':'\''+str(last_quote2_snap).replace('\'','')+'\'',
-                            'fill_price':'\''+str(fill_price).replace('\'','')+'\''
+                            'fill_price':'\''+str(fill_price).replace('\'','')+'\'',
+                            'profit':self.profit
                         }
                         self.insert_trd_rec(trd_rec)
                         send_hotmail('Position opened ('+self.ccy+')', trd_rec, self.set_obj)
@@ -585,6 +583,7 @@ def send_hotmail(subject, content, set_obj):
 
 def format_email_dict(content):
     content_tmp=''
-    for item in content.keys():
+    key_list=['datetime','ccy','amount','buysell','sprd_open','forex_quote','oanda_quote','fill_price','profit']
+    for item in key_list:
         content_tmp+=str(item)+':'+str(content[item])+'\r\n'
     return content_tmp
