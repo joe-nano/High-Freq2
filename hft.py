@@ -130,7 +130,7 @@ class hft:
         self.ping_limit=set_obj.get_ping_limit()
         self.neg_tol=5
         self.safe_buffer=60 #seconds
-        self.trd_hour=range(3,14)
+        self.trd_hour=range(4,15)
 
 
         self.current_amount=0
@@ -363,7 +363,8 @@ class hft:
                                 #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
                         else:
                             self.num_neg_spread=0
-
+                            self.trd_enabled=False
+                            self.time_stamp_bad=datetime.datetime.now()
 
             elif  (trading_time.hour in self.trd_hour) and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount>-self.max_amount:
@@ -409,7 +410,8 @@ class hft:
                                 #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
                         else:
                             self.num_neg_spread=0
-
+                            self.trd_enabled=False
+                            self.time_stamp_bad=datetime.datetime.now()
 
         except Exception as error:
             print (self.ccy, 'error encountered, error: '+str(error))
