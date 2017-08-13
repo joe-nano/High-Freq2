@@ -35,6 +35,14 @@ def insert_trd_rec(conn, dict):
 
 def main(args):
 
+    login_file='/Users/MengfeiZhang/Desktop/tmp/login_info_hft.csv'
+    ccy_list_file='/Users/MengfeiZhang/Desktop/tmp/hft_ccy_list.csv'
+    #login_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/login_info_hft.csv'
+    #ccy_list_file='C:/Users/Mengfei Zhang/Desktop/fly capital/trading/hft_ccy_list.csv'
+
+    set_obj=set(login_file)
+
+    '''
     conn= connect(host='localhost',
                       user='root',
                       passwd='891124',
@@ -52,7 +60,11 @@ def main(args):
     }
 
     insert_trd_rec(conn,dict)
+    '''
 
+    broker2=Oanda('dummy', set_obj)
+
+    print (broker2.get_eco_cal())
 
 if __name__=='__main__':
     sys.exit(main(sys.argv))

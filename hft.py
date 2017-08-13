@@ -104,7 +104,6 @@ class hft:
 
 
     def __init__(self, ccy, trd_enabled, set_obj):
-        run_time=time.strftime("%Y%m%d_%H%M%S")
         self.broker1=forexcom(o2f(ccy), set_obj)
         self.broker2=Oanda(ccy, set_obj)
         self.trd_enabled=trd_enabled
@@ -130,7 +129,8 @@ class hft:
         self.ping_limit=set_obj.get_ping_limit()
         self.neg_tol=5
         self.safe_buffer=60 #seconds
-        self.trd_hour=range(4,15)
+        #self.trd_hour=range(4,15)
+        self.trd_hour=self.broker2.get_eco_cal()
 
 
         self.current_amount=0
@@ -318,7 +318,7 @@ class hft:
             if self.trd_enabled==False and dt_bad.total_seconds()>self.safe_buffer and dt_bad.total_seconds()<10*self.safe_buffer:
                 self.trd_enabled=True
 
-            if (trading_time.hour in self.trd_hour) and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
+            if in_trd_hour(trading_time, self.trd_hour) and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount<self.max_amount:
 
                 self.get_trd_amount(self.last_quote2['bid']-self.last_quote1['ask'], '1') #calculate trade amount
@@ -366,7 +366,7 @@ class hft:
                             self.trd_enabled=False
                             self.time_stamp_bad=datetime.datetime.now()
 
-            elif  (trading_time.hour in self.trd_hour) and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
+            elif  in_trd_hour(trading_time, self.trd_hour) and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount>-self.max_amount:
 
                 self.get_trd_amount(self.last_quote1['bid']-self.last_quote2['ask'], '2') #calculate trade amount
@@ -529,6 +529,18 @@ def close(ccy, set_obj):
     hft_obj=hft(ccy, True, set_obj)
     hft_obj.close_position()
 
+def in_trd_hour(trading_time, trd_hour):
+
+    try:
+
+        if trading_time.hour in trd_hour[trading_time.day]:
+            return True
+        else:
+            return False
+
+    except:
+
+        return False
 
 def monitor(set_obj):
     print ('Monitor started...')

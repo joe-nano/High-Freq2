@@ -10,6 +10,7 @@ import threading
 import datetime
 import ast
 import logging
+import urllib.request, urllib.parse
 
 '''
 logging.basicConfig(
@@ -146,3 +147,36 @@ class Oanda:
         except Exception as err:
 
             print('Fail to get Oanda NAV: '+str(err))
+
+    def get_eco_cal(self):
+
+        header={'Authorization':'Bearer '+self.token}
+
+        eco_ccy=['EUR_USD','USD_JPY']
+        eco_event=[]
+        eco_time={}
+
+        for ccy in eco_ccy:
+            url='https://api-fxtrade.oanda.com/labs/v1/calendar?instrument='+ccy+'&period=-604800'
+            req=urllib.request.Request(url=url, headers=header, method='GET')
+            resp=urllib.request.urlopen(req).read()
+            resp=json.loads(resp.decode('utf-8'))
+
+            eco_event+=resp
+
+        for ev in eco_event:
+            ev_time=datetime.datetime.fromtimestamp(ev['timestamp'])
+
+            if ev_time.day in eco_time.keys():
+                eco_time[ev_time.day].append(ev_time.hour)
+            else:
+                eco_time[ev_time.day]=[ev_time.hour]
+
+            if ev_time.minute==0:
+                eco_time[ev_time.day].append(ev_time.hour-1)
+
+        for key in eco_time:
+
+            eco_time[key]=list(set(eco_time[key]))
+
+        return eco_time
