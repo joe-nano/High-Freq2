@@ -99,15 +99,17 @@ class Oanda:
         except Exception as err:
 
             if ('does not exist' in str(err))==True:
-                data ={'shortUnits':'ALL'}
-                order_close=positions.PositionClose(accountID=self.account_id,instrument=self.ccy,data=data)
 
-                self.client.request(order_close)
-                resp_close=order_close.response
-                return float(resp_close['shortOrderFillTransaction']['price'])
-            else:
-                print ("position not closed: "+str(err))
-                return -1
+                try:
+                    data ={'shortUnits':'ALL'}
+                    order_close=positions.PositionClose(accountID=self.account_id,instrument=self.ccy,data=data)
+
+                    self.client.request(order_close)
+                    resp_close=order_close.response
+                    return float(resp_close['shortOrderFillTransaction']['price'])
+                except Exception as err:
+                    print ("position not closed: "+str(err))
+                    return -1
 
     def get_position(self):
 

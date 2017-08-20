@@ -138,7 +138,7 @@ class hft:
         self.s=None
         self.stream_queue=queue.Queue()
 
-        #self.check_position() #initialize is_open flag/open type, get current amount
+        self.check_position() #initialize is_open flag/open type, get current amount
         self.connect_db()
 
     def connect_db(self):
@@ -437,15 +437,13 @@ class hft:
 
     def monitor(self):
         print ('Monitor started...')
-        timer=10
+        timer=60
 
         init_nav=self.broker1.get_nav()+self.broker2.get_nav()
         #prev_nav=init_nav
         while True:
             try:
                 current_nav=self.broker1.get_nav()+self.broker2.get_nav()
-                self.stream_queue.put('Monitor: init nav='+str(init_nav)+',current nav='+str(current_nav)+',current amount='+str(self.current_amount))
-                self.check_position() #check unbalanced position
 
                 if current_nav-init_nav>-self.set_obj.get_max_loss(): #loss less than threadhold
                     time.sleep(timer)
