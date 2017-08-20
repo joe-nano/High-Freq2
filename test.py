@@ -62,9 +62,12 @@ def main(args):
     insert_trd_rec(conn,dict)
     '''
 
+    trd_time=datetime(2017, 8, 21, 3, 0, 0, 0)
     broker2=Oanda('dummy', set_obj)
+    trd_hour=broker2.get_eco_cal()
+    print (trd_hour)
 
-    print (broker2.get_eco_cal())
+    print (in_trd_hour(trd_time, trd_hour))
 
 if __name__=='__main__':
     sys.exit(main(sys.argv))

@@ -138,7 +138,7 @@ class hft:
         self.s=None
         self.stream_queue=queue.Queue()
 
-        self.check_position() #initialize is_open flag/open type, get current amount
+        #self.check_position() #initialize is_open flag/open type, get current amount
         self.connect_db()
 
     def connect_db(self):
@@ -295,14 +295,7 @@ class hft:
             send_hotmail('Unbalanced position ('+self.ccy+'):', {'msg':' Position closed out'}, self.set_obj)
 
 
-    def get_trd_amount(self, sprd, dir):  
-
-        avl_amount=0
-
-        if dir=='1': #buy more forex.com
-            avl_amount=self.max_amount-self.current_amount
-        elif dir=='2': #buy more Oanda
-            avl_amount=self.current_amount+self.max_amount
+    def get_trd_amount(self, sprd, dir):
 
         self.trd_amount=self.amount
 
@@ -442,6 +435,29 @@ class hft:
         else:
             return -1
 
+    def monitor(self):
+        print ('Monitor started...')
+        timer=10
+
+        init_nav=self.broker1.get_nav()+self.broker2.get_nav()
+        #prev_nav=init_nav
+        while True:
+            try:
+                current_nav=self.broker1.get_nav()+self.broker2.get_nav()
+                self.stream_queue.put('Monitor: init nav='+str(init_nav)+',current nav='+str(current_nav)+',current amount='+str(self.current_amount))
+                self.check_position() #check unbalanced position
+
+                if current_nav-init_nav>-self.set_obj.get_max_loss(): #loss less than threadhold
+                    time.sleep(timer)
+                else: #loss larger than threadhold
+                    self.close_position()
+                    send_hotmail('Loss exceeds max limit', {'msg':'All threads stopped'}, self.set_obj)
+                    os._exit(0) #if loss>max loss limit exit the entire program
+
+            except:
+                time.sleep(timer)
+                self.monitor()
+
 
 
 class set:
@@ -531,51 +547,23 @@ def close(ccy, set_obj):
 
 def in_trd_hour(trading_time, trd_hour):
 
-    try:
+    if trading_time.hour in [9,10]: #normal trading hour
+
+        return True
+
+    elif trading_time.weekday()+1==3 and (trading_time.hour in [13,14]): #FOMC
+
+        return True
+
+    elif trading_time.day in trd_hour.keys(): #if has economic event
 
         if trading_time.hour in trd_hour[trading_time.day]:
             return True
         else:
             return False
-
-    except:
-
+    else:
         return False
 
-def monitor(set_obj):
-    print ('Monitor started...')
-    broker1=forexcom('dummy', set_obj)
-    broker2=Oanda('dummy', set_obj)
-    timer=5
-    time_cum=0
-
-    init_nav=broker1.get_nav()+broker2.get_nav()
-    prev_nav=init_nav
-    while True:
-        try:
-            current_nav=broker1.get_nav()+broker2.get_nav()
-            #print ('current NAV: '+str(current_nav)) #for debugging
-            time_cum+=timer
-
-            weekday=datetime.datetime.today().weekday()
-            now=datetime.datetime.now()
-
-            if current_nav-init_nav>-set_obj.get_max_loss():
-                if time_cum>=3600:
-                    init_nav=current_nav
-                    time_cum=0
-                prev_nav=current_nav
-                time.sleep(timer)
-            else:
-                if current_nav-prev_nav>-set_obj.get_max_loss():
-                    send_hotmail('Loss exceeds max limit', {'msg':'All threads stopped'}, set_obj)
-                    os._exit(0) #if loss>max loss limit exit the entire program
-                else: # withdraw
-                    init_nav=current_nav
-
-        except:
-            time.sleep(5)
-            monitor(set_obj)
 
 
 def send_hotmail(subject, content, set_obj):

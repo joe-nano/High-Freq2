@@ -106,7 +106,8 @@ class Oanda:
                 resp_close=order_close.response
                 return float(resp_close['shortOrderFillTransaction']['price'])
             else:
-                print ("order not executed "+str(err))
+                print ("position not closed: "+str(err))
+                return -1
 
     def get_position(self):
 

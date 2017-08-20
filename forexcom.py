@@ -277,12 +277,18 @@ class forexcom:
 
     def close_position(self):
 
-        conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
-        conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx', self.req_soap_close_pos.format(appname=str(self.app), token=self.token, ccy=self.ccy), self.header_close_pos)
-        resp = str(conn.getresponse().read())
-        resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['ClosePositionResponse']['ClosePositionResult']
+        try:
 
-        return float(resp_dict['rate'])
+            conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
+            conn.request('POST', '/gaincapitalwebservices/trading/tradingservice.asmx', self.req_soap_close_pos.format(appname=str(self.app), token=self.token, ccy=self.ccy), self.header_close_pos)
+            resp = str(conn.getresponse().read())
+            resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['ClosePositionResponse']['ClosePositionResult']
+
+            return float(resp_dict['rate'])
+
+        except Exception as err:
+            print ("position not closed: "+str(err))
+            return -1
 
     def get_position(self):
 
