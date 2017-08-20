@@ -437,7 +437,7 @@ class hft:
 
     def monitor(self):
         print ('Monitor started...')
-        timer=60
+        timer=5
 
         init_nav=self.broker1.get_nav()+self.broker2.get_nav()
         #prev_nav=init_nav
