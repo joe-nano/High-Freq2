@@ -23,9 +23,14 @@ def main(args):
 
         threads=[]
 
+        i=0
+
         for hft_obj in hft_list:
             threads.append(threading.Thread(target=hft_obj.start(),args=None))
-            threads.append(threading.Thread(target=hft_obj.monitor(),args=None)) #monitor
+
+            if i==0:
+                threads.append(threading.Thread(target=hft_obj.monitor(),args=None)) #monitor
+            i+=1
 
         for thread in threads:
             thread.start()
