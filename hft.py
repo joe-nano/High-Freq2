@@ -104,6 +104,7 @@ class hft:
 
 
     def __init__(self, ccy, trd_enabled, set_obj):
+        run_time=time.strftime("%Y%m%d_%H%M%S")
         self.broker1=forexcom(o2f(ccy), set_obj)
         self.broker2=Oanda(ccy, set_obj)
         self.trd_enabled=trd_enabled
@@ -129,8 +130,7 @@ class hft:
         self.ping_limit=set_obj.get_ping_limit()
         self.neg_tol=5
         self.safe_buffer=60 #seconds
-        #self.trd_hour=range(4,15)
-        self.trd_hour=self.broker2.get_eco_cal()
+        self.trd_hour=range(8,15)
 
 
         self.current_amount=0
@@ -237,7 +237,7 @@ class hft:
                         self.execute()
                         self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
                         self.locker.release()
-                        
+
             except Exception as error:
                 if ('timed' in str(error))==True or ('Max' in str(error))==True:
                     print ('Oanda '+str(self.broker2.ccy)+' connection failed...')
@@ -297,6 +297,13 @@ class hft:
 
     def get_trd_amount(self, sprd, dir):
 
+        avl_amount=0
+
+        if dir=='1': #buy more forex.com
+            avl_amount=self.max_amount-self.current_amount
+        elif dir=='2': #buy more Oanda
+            avl_amount=self.current_amount+self.max_amount
+
         self.trd_amount=self.amount
 
 
@@ -311,7 +318,7 @@ class hft:
             if self.trd_enabled==False and dt_bad.total_seconds()>self.safe_buffer and dt_bad.total_seconds()<10*self.safe_buffer:
                 self.trd_enabled=True
 
-            if in_trd_hour(trading_time, self.trd_hour) and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
+            if (trading_time.hour in self.trd_hour) and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount<self.max_amount:
 
                 self.get_trd_amount(self.last_quote2['bid']-self.last_quote1['ask'], '1') #calculate trade amount
@@ -356,10 +363,9 @@ class hft:
                                 #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
                         else:
                             self.num_neg_spread=0
-                            self.trd_enabled=False
-                            self.time_stamp_bad=datetime.datetime.now()
 
-            elif  in_trd_hour(trading_time, self.trd_hour) and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
+
+            elif  (trading_time.hour in self.trd_hour) and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount>-self.max_amount:
 
                 self.get_trd_amount(self.last_quote1['bid']-self.last_quote2['ask'], '2') #calculate trade amount
@@ -403,8 +409,7 @@ class hft:
                                 #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
                         else:
                             self.num_neg_spread=0
-                            self.trd_enabled=False
-                            self.time_stamp_bad=datetime.datetime.now()
+
 
         except Exception as error:
             print (self.ccy, 'error encountered, error: '+str(error))
@@ -434,27 +439,6 @@ class hft:
                 return -1
         else:
             return -1
-
-    def monitor(self):
-        print ('Monitor started...')
-        timer=5
-
-        init_nav=self.broker1.get_nav()+self.broker2.get_nav()
-        #prev_nav=init_nav
-        while True:
-            try:
-                current_nav=self.broker1.get_nav()+self.broker2.get_nav()
-
-                if current_nav-init_nav>-self.set_obj.get_max_loss(): #loss less than threadhold
-                    time.sleep(timer)
-                else: #loss larger than threadhold
-                    self.close_position()
-                    send_hotmail('Loss exceeds max limit', {'msg':'All threads stopped'}, self.set_obj)
-                    os._exit(0) #if loss>max loss limit exit the entire program
-
-            except:
-                time.sleep(timer)
-                self.monitor()
 
 
 
@@ -543,25 +527,41 @@ def close(ccy, set_obj):
     hft_obj=hft(ccy, True, set_obj)
     hft_obj.close_position()
 
-def in_trd_hour(trading_time, trd_hour):
 
-    if trading_time.hour in [9,10]: #normal trading hour
+def monitor(set_obj):
+    print ('Monitor started...')
+    broker1=forexcom('dummy', set_obj)
+    broker2=Oanda('dummy', set_obj)
+    timer=5
+    time_cum=0
 
-        return True
+    init_nav=broker1.get_nav()+broker2.get_nav()
+    prev_nav=init_nav
+    while True:
+        try:
+            current_nav=broker1.get_nav()+broker2.get_nav()
+            #print ('current NAV: '+str(current_nav)) #for debugging
+            time_cum+=timer
 
-    elif trading_time.weekday()+1==3 and (trading_time.hour in [13,14]): #FOMC
+            weekday=datetime.datetime.today().weekday()
+            now=datetime.datetime.now()
 
-        return True
+            if current_nav-init_nav>-set_obj.get_max_loss():
+                if time_cum>=3600:
+                    init_nav=current_nav
+                    time_cum=0
+                prev_nav=current_nav
+                time.sleep(timer)
+            else:
+                if current_nav-prev_nav<-set_obj.get_max_loss():
+                    send_hotmail('Loss exceeds max limit', {'msg':'All threads stopped'}, set_obj)
+                    os._exit(0) #if loss>max loss limit exit the entire program
+                else: # withdraw
+                    init_nav=current_nav
 
-    elif trading_time.day in trd_hour.keys(): #if has economic event
-
-        if trading_time.hour in trd_hour[trading_time.day]:
-            return True
-        else:
-            return False
-    else:
-        return False
-
+        except:
+            time.sleep(5)
+            monitor(set_obj)
 
 
 def send_hotmail(subject, content, set_obj):
