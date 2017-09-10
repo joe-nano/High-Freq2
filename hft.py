@@ -118,7 +118,6 @@ class hft:
         self.last_quote2={'ask':-999999,'bid':-999999}
         self.time_stamp1=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
         self.time_stamp2=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
-        self.time_stamp_bad=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
 
         self.num_neg_spread=0
         self.spread_open_act=0
@@ -130,8 +129,11 @@ class hft:
         self.ping_limit=set_obj.get_ping_limit()
         self.neg_tol=5
         self.safe_buffer=60 #seconds
+        self.trd_buffer=5 #seconds
         self.trd_hour=range(8,15)
 
+        self.resume=threading.Event() #creating resume event
+        self.resume.set() #initialize it to True
 
         self.current_amount=0
         self.profit=0
@@ -183,7 +185,6 @@ class hft:
 
     def trading(self, broker):
 
-
         if broker=='Forexcom':
 
             self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -204,10 +205,11 @@ class hft:
                             self.last_quote1['ask']=float(ccy_live_list[2])
                             self.time_stamp1=datetime.datetime.now()
 
-                            self.locker.acquire()
-                            self.execute()
-                            self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote1))
-                            self.locker.release()
+                            if self.resume.is_set()==True: #only call execute when resume==True
+                                self.locker.acquire()
+                                self.execute()
+                                self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote1))
+                                self.locker.release()
 
                 except Exception as error:
                     if ('timed' in str(error))==True:
@@ -233,10 +235,11 @@ class hft:
                         self.last_quote2['ask']=float(ticks['asks'][0]['price'])
                         self.time_stamp2=datetime.datetime.now()
 
-                        self.locker.acquire()
-                        self.execute()
-                        self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
-                        self.locker.release()
+                        if self.resume.is_set()==True: #only call execute when resume==True
+                            self.locker.acquire()
+                            self.execute()
+                            self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
+                            self.locker.release()
 
             except Exception as error:
                 if ('timed' in str(error))==True or ('Max' in str(error))==True:
@@ -296,13 +299,14 @@ class hft:
 
 
     def get_trd_amount(self, sprd, dir):
-
+        '''
         avl_amount=0
 
         if dir=='1': #buy more forex.com
             avl_amount=self.max_amount-self.current_amount
         elif dir=='2': #buy more Oanda
             avl_amount=self.current_amount+self.max_amount
+        '''
 
         self.trd_amount=self.amount
 
@@ -313,10 +317,6 @@ class hft:
             trading_time=datetime.datetime.now()
             dt1=trading_time-self.time_stamp1
             dt2=trading_time-self.time_stamp2
-            dt_bad=trading_time-self.time_stamp_bad
-
-            if self.trd_enabled==False and dt_bad.total_seconds()>self.safe_buffer and dt_bad.total_seconds()<10*self.safe_buffer:
-                self.trd_enabled=True
 
             if (trading_time.hour in self.trd_hour) and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount<self.max_amount:
@@ -358,10 +358,13 @@ class hft:
                         if self.spread_open_act<0:
                             self.num_neg_spread+=1
                             if self.num_neg_spread>=self.neg_tol:
-                                self.trd_enabled=False
-                                self.time_stamp_bad=datetime.datetime.now()
-                                #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
+                                self.resume.clear()
+                                time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
+                                self.resume.set()
                         else:
+                            self.resume.clear()
+                            time.sleep(self.trd_buffer) #halt trading temporarily after an order is placed
+                            self.resume.set()
                             self.num_neg_spread=0
 
 
@@ -404,10 +407,13 @@ class hft:
                         if self.spread_open_act<0:
                             self.num_neg_spread+=1
                             if self.num_neg_spread>=self.neg_tol:
-                                self.trd_enabled=False
-                                self.time_stamp_bad=datetime.datetime.now()
-                                #time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
+                                self.resume.clear()
+                                time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
+                                self.resume.set()
                         else:
+                            self.resume.clear()
+                            time.sleep(self.trd_buffer) #halt trading temporarily after an order is placed
+                            self.resume.set()
                             self.num_neg_spread=0
 
 
