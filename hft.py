@@ -98,7 +98,7 @@ def o2f(ccy):
     ccy_pair=ccy.split('_')
     return ccy_pair[0]+'/'+ccy_pair[1]
 
-
+max_trd_time=3
 
 class hft:
 
@@ -130,7 +130,8 @@ class hft:
         self.neg_tol=5
         self.safe_buffer=60 #seconds
         self.trd_buffer=5 #seconds
-        self.trd_hour=range(8,15)
+        self.trd_hour=range(8,13)
+        self.trd_time=0
 
         self.resume=threading.Event() #creating resume event
         self.resume.set() #initialize it to True
@@ -204,6 +205,8 @@ class hft:
                             self.last_quote1['bid']=float(ccy_live_list[1])
                             self.last_quote1['ask']=float(ccy_live_list[2])
                             self.time_stamp1=datetime.datetime.now()
+                            if self.time_stamp1.hour==1: #reset daily trade limit
+                                self.trd_time=0
 
                             if self.resume.is_set()==True: #only call execute when resume==True
                                 self.locker.acquire()
@@ -234,6 +237,8 @@ class hft:
                         self.last_quote2['bid']=float(ticks['bids'][0]['price'])
                         self.last_quote2['ask']=float(ticks['asks'][0]['price'])
                         self.time_stamp2=datetime.datetime.now()
+                        if self.time_stamp2.hour==1: #reset daily trade limit
+                            self.trd_time=0
 
                         if self.resume.is_set()==True: #only call execute when resume==True
                             self.locker.acquire()
@@ -318,8 +323,12 @@ class hft:
             dt1=trading_time-self.time_stamp1
             dt2=trading_time-self.time_stamp2
 
-            if (trading_time.hour in self.trd_hour) and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
-                    and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount<self.max_amount:
+            if self.trd_time<=max_trd_time \
+                    and (trading_time.hour in self.trd_hour) \
+                    and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] \
+                    and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
+                    and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit \
+                    and self.current_amount<self.max_amount:
 
                 self.get_trd_amount(self.last_quote2['bid']-self.last_quote1['ask'], '1') #calculate trade amount
 
@@ -338,6 +347,7 @@ class hft:
                         self.spread_open_act=fill_price['2']-fill_price['1']
                         self.current_amount+=self.trd_amount #relative to broker1
                         self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.00005
+                        self.trd_time+=1
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -368,8 +378,12 @@ class hft:
                             self.num_neg_spread=0
 
 
-            elif  (trading_time.hour in self.trd_hour) and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
-                    and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit and self.current_amount>-self.max_amount:
+            elif  self.trd_time<=max_trd_time \
+                    and (trading_time.hour in self.trd_hour) \
+                    and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] \
+                    and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
+                    and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit \
+                    and self.current_amount>-self.max_amount:
 
                 self.get_trd_amount(self.last_quote1['bid']-self.last_quote2['ask'], '2') #calculate trade amount
 
@@ -388,6 +402,7 @@ class hft:
                         self.spread_open_act=fill_price['1']-fill_price['2']
                         self.current_amount-=self.trd_amount
                         self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.00005
+                        self.trd_time+=1
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         trd_rec={
