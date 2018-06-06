@@ -257,7 +257,7 @@ class forexcom:
                 self.connect()
         except Exception as error:
 
-            print (self.broker_name+self.ccy+' '+'connection failed...')
+            print (self.broker_name+self.ccy+' '+'connection failed: '+str(error))
             print (error)
             time.sleep(5)
             self.connect()

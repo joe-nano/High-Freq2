@@ -40,8 +40,8 @@ class Oanda:
             req_acct = accounts.AccountDetails(self.account_id)
             self.client.request(req_acct) #get account info
             print (self.broker_name+self.ccy+' '+'connection succeeded...')
-        except:
-            print (self.broker_name+self.ccy+' '+'connection failed...')
+        except Exception as error:
+            print (self.broker_name+self.ccy+' '+'connection failed: '+str(error))
             time.sleep(5)
             self.connect()
 
