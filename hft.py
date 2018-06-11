@@ -77,7 +77,7 @@ ccy_dict={
 }
 
 MAX_TRD_TIME=3
-SPREAD_JPY=-0.01
+SPREAD_JPY=0.02
 SPREAD_NONE_JPY=0.00015
 MAX_NEG_TRD=5
 SAFE_BUFFER=60
@@ -120,7 +120,7 @@ class hft:
         self.ccy=ccy #in XXX_YYY format
         self.locker=threading.Lock()
 
-        self.bd=(get_boundary(self.ccy),0)
+        self.bd=(get_boundary(self.ccy),get_boundary(self.ccy)/4.0)
         self.last_quote1={'ask':-999999,'bid':-999999}
         self.last_quote2={'ask':-999999,'bid':-999999}
         self.time_stamp1=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
