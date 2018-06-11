@@ -76,17 +76,26 @@ ccy_dict={
     'R107': 'USD/CNH'
 }
 
+MAX_TRD_TIME=3
+SPREAD_JPY=-0.01
+SPREAD_NONE_JPY=0.00015
+MAX_NEG_TRD=5
+SAFE_BUFFER=60
+TRD_BUFFER=60
+TRD_HOUR=range(0,24)
+TRD_RESET_HOUR=1
+UPPER_BOUND=1
+
+
 
 def get_boundary(ccy):
 
     if ('JPY' in ccy)==True:
-        lb=0.02 #Prob{spread>0.02}<20%
-        ub=1
+        lb=SPREAD_JPY #Prob{spread>0.02}<20%
     else:
-        lb=0.00015
-        ub=1
+        lb=SPREAD_NONE_JPY
 
-    return (lb, ub)
+    return lb
 
 def f2o(ccy):
 
@@ -98,13 +107,11 @@ def o2f(ccy):
     ccy_pair=ccy.split('_')
     return ccy_pair[0]+'/'+ccy_pair[1]
 
-max_trd_time=3
 
 class hft:
 
 
     def __init__(self, ccy, trd_enabled, set_obj):
-        run_time=time.strftime("%Y%m%d_%H%M%S")
         self.broker1=forexcom(o2f(ccy), set_obj)
         self.broker2=Oanda(ccy, set_obj)
         self.trd_enabled=trd_enabled
@@ -113,32 +120,31 @@ class hft:
         self.ccy=ccy #in XXX_YYY format
         self.locker=threading.Lock()
 
-        self.bd=get_boundary(self.ccy)
+        self.bd=(get_boundary(self.ccy),0)
         self.last_quote1={'ask':-999999,'bid':-999999}
         self.last_quote2={'ask':-999999,'bid':-999999}
         self.time_stamp1=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
         self.time_stamp2=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
 
-        self.num_neg_spread=0
-        self.spread_open_act=0
-
         #configuration
         self.max_amount=set_obj.get_max_amount()
         self.amount=set_obj.get_single_amount() #min amount
-        self.trd_amount=0
         self.ping_limit=set_obj.get_ping_limit()
-        self.neg_tol=5
-        self.safe_buffer=60 #seconds
-        self.trd_buffer=5 #seconds
-        self.trd_hour=range(8,13)
-        self.trd_time=0
+        self.neg_tol=MAX_NEG_TRD
+        self.safe_buffer=SAFE_BUFFER #seconds
+        self.trd_buffer=TRD_BUFFER #seconds
+        self.trd_hour=TRD_HOUR
 
-        self.resume=threading.Event() #creating resume event
-        self.resume.set() #initialize it to True
-
+        self.num_neg_spread=0
+        self.spread_open_act=0
+        self.trd_amount=0
+        self.trd_time=1
+        self.bd_count=0
         self.current_amount=0
         self.profit=0
         self.s=None
+        self.resume=threading.Event() #creating resume event
+        self.resume.set() #initialize it to True
         self.stream_queue=queue.Queue()
 
         self.check_position() #initialize is_open flag/open type, get current amount
@@ -205,14 +211,14 @@ class hft:
                             self.last_quote1['bid']=float(ccy_live_list[1])
                             self.last_quote1['ask']=float(ccy_live_list[2])
                             self.time_stamp1=datetime.datetime.now()
-                            if self.time_stamp1.hour==1: #reset daily trade limit
-                                self.trd_time=0
 
                             if self.resume.is_set()==True: #only call execute when resume==True
                                 self.locker.acquire()
                                 self.execute()
                                 self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote1))
                                 self.locker.release()
+
+                            break
 
                 except Exception as error:
                     if ('timed' in str(error))==True:
@@ -237,7 +243,7 @@ class hft:
                         self.last_quote2['bid']=float(ticks['bids'][0]['price'])
                         self.last_quote2['ask']=float(ticks['asks'][0]['price'])
                         self.time_stamp2=datetime.datetime.now()
-                        if self.time_stamp2.hour==1: #reset daily trade limit
+                        if self.time_stamp2.hour==TRD_RESET_HOUR: #reset daily trade limit
                             self.trd_time=0
 
                         if self.resume.is_set()==True: #only call execute when resume==True
@@ -323,10 +329,10 @@ class hft:
             dt1=trading_time-self.time_stamp1
             dt2=trading_time-self.time_stamp2
 
-            if self.trd_time<=max_trd_time \
+            if self.trd_time<=MAX_TRD_TIME \
                     and (trading_time.hour in self.trd_hour) \
-                    and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[0] \
-                    and (self.last_quote2['bid']-self.last_quote1['ask'])<self.bd[1] \
+                    and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[(self.bd_count % 2)] \
+                    and (self.last_quote2['bid']-self.last_quote1['ask'])<UPPER_BOUND \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit \
                     and self.current_amount<self.max_amount:
 
@@ -347,6 +353,7 @@ class hft:
                         self.spread_open_act=fill_price['2']-fill_price['1']
                         self.current_amount+=self.trd_amount #relative to broker1
                         self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.00005
+                        self.bd_count+=1
                         self.trd_time+=1
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -378,10 +385,10 @@ class hft:
                             self.num_neg_spread=0
 
 
-            elif  self.trd_time<=max_trd_time \
+            elif  self.trd_time<=MAX_TRD_TIME \
                     and (trading_time.hour in self.trd_hour) \
-                    and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[0] \
-                    and (self.last_quote1['bid']-self.last_quote2['ask'])<self.bd[1] \
+                    and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[(self.bd_count % 2)] \
+                    and (self.last_quote1['bid']-self.last_quote2['ask'])<UPPER_BOUND \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit \
                     and self.current_amount>-self.max_amount:
 
@@ -402,6 +409,7 @@ class hft:
                         self.spread_open_act=fill_price['1']-fill_price['2']
                         self.current_amount-=self.trd_amount
                         self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.00005
+                        self.bd_count+=1
                         self.trd_time+=1
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -549,7 +557,7 @@ def close(ccy, set_obj):
     hft_obj.close_position()
 
 
-def monitor(set_obj):
+def monitor(set_obj, nav_path):
     print ('Monitor started...')
     broker1=forexcom('dummy', set_obj)
     broker2=Oanda('dummy', set_obj)
@@ -568,9 +576,15 @@ def monitor(set_obj):
             now=datetime.datetime.now()
 
             if current_nav-init_nav>-set_obj.get_max_loss():
-                if time_cum>=3600:
+                if time_cum>=3600: #check every hour
                     init_nav=current_nav
                     time_cum=0
+
+                    if int(now.hour)==15: #if 3 pm
+                        nav_file=open(nav_path,'a')
+                        writer=csv.writer(nav_file)
+                        writer.writerow([str(now.strftime("%Y%m%d_%H%M%S")), current_nav])
+
                 prev_nav=current_nav
                 time.sleep(timer)
             else:

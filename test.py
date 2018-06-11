@@ -62,7 +62,11 @@ def main(args):
     insert_trd_rec(conn,dict)
     '''
 
-    trd_time=datetime(2017, 8, 21, 3, 0, 0, 0)
+    print (0 % 2)
+    print (14 % 2)
+
+    trd_time=datetime.now()
+    print (trd_time.hour)
     broker2=Oanda('dummy', set_obj)
     trd_hour=broker2.get_eco_cal()
     print (trd_hour)
