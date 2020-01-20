@@ -83,19 +83,22 @@ MAX_NEG_TRD=5
 SAFE_BUFFER=60
 TRD_BUFFER=60
 TRD_HOUR=range(0,24)
-TRD_RESET_HOUR=1
+TRD_RESET_HOUR=0
 UPPER_BOUND=1
 
 
 
 def get_boundary(ccy):
 
-    if ('JPY' in ccy)==True:
-        lb=SPREAD_JPY #Prob{spread>0.02}<20%
+    if 'JPY' in ccy:
+        scal=100.0
+        lb=1.5
+        ub=scal
     else:
-        lb=SPREAD_NONE_JPY
-
-    return lb
+        scal=10000.0
+        lb=1.5
+        ub=scal
+    return (lb/scal, ub/scal, scal)
 
 def f2o(ccy):
 
@@ -120,16 +123,19 @@ class hft:
         self.ccy=ccy #in XXX_YYY format
         self.locker=threading.Lock()
 
-        self.bd=(get_boundary(self.ccy),get_boundary(self.ccy)/4.0)
+        self.bd=(get_boundary(self.ccy),0.005)
         self.last_quote1={'ask':-999999,'bid':-999999}
-        self.last_quote2={'ask':-999999,'bid':-999999}
+        self.last_quote2={'ask':-1,'bid':-1}
         self.time_stamp1=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
         self.time_stamp2=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
+        self.trd_buffer_time=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
+        self.safe_buffer_time=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
+        self.stream_queue=queue.Queue()
 
         #configuration
         self.max_amount=set_obj.get_max_amount()
         self.amount=set_obj.get_single_amount() #min amount
-        self.ping_limit=set_obj.get_ping_limit()
+        self.latency_limit=set_obj.get_latency_limit()
         self.neg_tol=MAX_NEG_TRD
         self.safe_buffer=SAFE_BUFFER #seconds
         self.trd_buffer=TRD_BUFFER #seconds
@@ -139,22 +145,26 @@ class hft:
         self.spread_open_act=0
         self.trd_amount=0
         self.trd_time=1
-        self.bd_count=0
         self.current_amount=0
         self.profit=0
         self.s=None
-        self.resume=threading.Event() #creating resume event
-        self.resume.set() #initialize it to True
-        self.stream_queue=queue.Queue()
 
         self.check_position() #initialize is_open flag/open type, get current amount
         self.connect_db()
 
-    def connect_db(self):
+    def connect_db(self, local=False):
 
-        self.conn_db= connect(host='localhost',
+        if local == True:
+            self.conn_db = connect(host='localhost',
                               user='root',
-                              passwd='891124',
+                              passwd='FN891124mysql',
+                              db='tradingdb')
+
+        else:
+
+            self.conn_db = connect(host='mysqlaws.cwdlc79zzkjv.us-east-2.rds.amazonaws.com',
+                              user='mysqlaws',
+                              passwd='FN891124mysqlaws',
                               db='tradingdb')
 
 
@@ -164,7 +174,7 @@ class hft:
             cur=self.conn_db.cursor()
 
             values=''
-            key_list=['datetime','ccy','amount','buysell','sprd_open','forex_quote','oanda_quote','fill_price','profit']
+            key_list=['datetime','ccy','amount','buysell','sprd_open','ib_quote','oanda_quote','fill_price','profit']
             for key in key_list:
                 value_tmp=str(trd_rec[key])#.replace(',','/').replace(':','/')
                 #print (str(key)+' : '+value_tmp)
@@ -192,16 +202,17 @@ class hft:
 
     def trading(self, broker):
 
-        if broker=='Forexcom':
+        try:
 
-            self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.s.settimeout(30)
-            self.s.connect((self.broker1.rates_conn_info['IP'], int(self.broker1.rates_conn_info['Port'])))
-            self.s.sendall(bytes(self.broker1.token, 'utf-8'))
+            if broker=='Forexcom':
+
+                self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.s.settimeout(30)
+                self.s.connect((self.broker1.rates_conn_info['IP'], int(self.broker1.rates_conn_info['Port'])))
+                self.s.sendall(bytes(self.broker1.token, 'utf-8'))
 
 
-            while True:
-                try:
+                while True:
                     data_tmp=self.s.recv(1024).decode("utf-8")
                     ccy_list_tmp=data_tmp.split('\r')
                     for ccy in ccy_list_tmp:
@@ -212,29 +223,22 @@ class hft:
                             self.last_quote1['ask']=float(ccy_live_list[2])
                             self.time_stamp1=datetime.datetime.now()
 
-                            if self.resume.is_set()==True: #only call execute when resume==True
+                            if (self.time_stamp1-self.trd_buffer_time).total_seconds()>self.trd_buffer and \
+                                (self.time_stamp1-self.safe_buffer_time).total_seconds()>self.safe_buffer:
                                 self.locker.acquire()
                                 self.execute()
-                                self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote1))
                                 self.locker.release()
 
-                            break
+                            self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote1))
 
-                except Exception as error:
-                    if ('timed' in str(error))==True:
-                        self.s.close() #disconnect first
-                        print ('Forexcom '+str(self.broker2.ccy)+' connection failed...')
-                        self.broker1.connect()
-                        self.trading('Forexcom')
+                            #break
 
+            elif broker=='Oanda':
 
-        elif broker=='Oanda':
+                params ={
+                    "instruments": self.broker2.ccy,
+                }
 
-            params ={
-                "instruments": self.broker2.ccy,
-            }
-
-            try:
                 req = pricing.PricingStream(accountID=self.broker2.account_id, params=params)
                 resp_stream = self.broker2.client.request(req)
                 for ticks in resp_stream:
@@ -246,23 +250,36 @@ class hft:
                         if self.time_stamp2.hour==TRD_RESET_HOUR: #reset daily trade limit
                             self.trd_time=0
 
-                        if self.resume.is_set()==True: #only call execute when resume==True
+                        if (self.time_stamp2-self.trd_buffer_time).total_seconds()>self.trd_buffer and \
+                                (self.time_stamp2-self.safe_buffer_time).total_seconds()>self.safe_buffer: #only call execute when resume==True
                             self.locker.acquire()
                             self.execute()
-                            self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
                             self.locker.release()
 
-            except Exception as error:
-                if ('timed' in str(error))==True or ('Max' in str(error))==True:
-                    print ('Oanda '+str(self.broker2.ccy)+' connection failed...')
-                    self.broker2.connect()
-                    self.trading('Oanda')
+                        self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
 
+            else:
 
-        else:
+                print ('unknwon broker...')
+                return None
 
-            print ('unknwon broker...')
-            return None
+        except Exception as error:
+
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print(exc_type, fname, exc_tb.tb_lineno)
+            if broker == 'Forexcom':
+                self.s.close() #disconnect first
+                self.broker1.connect()
+                self.trading('Forexcom')
+            elif broker=='Oanda':
+                self.broker2.connect()
+                self.trading('Oanda')
+
+            print(str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")) +' '+ broker + ' trading failed: ' + str(error))
+            print('restarting '+broker+' ...')
+            time.sleep(30)
+            self.trading(broker)
 
     def start(self):
         try:
@@ -321,39 +338,38 @@ class hft:
 
         self.trd_amount=self.amount
 
-
     def execute(self):
         try:
             #ask=buy, bid=sell
+
+            last_quote1_snap = copy.deepcopy(self.last_quote1)
+            last_quote2_snap = copy.deepcopy(self.last_quote2)
+
             trading_time=datetime.datetime.now()
             dt1=trading_time-self.time_stamp1
             dt2=trading_time-self.time_stamp2
 
             if self.trd_time<=MAX_TRD_TIME \
                     and (trading_time.hour in self.trd_hour) \
-                    and (self.last_quote2['bid']-self.last_quote1['ask'])>=self.bd[(self.bd_count % 2)] \
-                    and (self.last_quote2['bid']-self.last_quote1['ask'])<UPPER_BOUND \
-                    and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit \
+                    and (self.last_quote2_snap['bid']-self.last_quote1_snap['ask'])>=self.bd[0] \
+                    and abs(self.last_quote2_snap['bid']-self.last_quote1_snap['ask'])<self.bd[1] \
+                    and max(dt1.total_seconds(), dt2.total_seconds())<self.latency_limit \
                     and self.current_amount<self.max_amount:
 
-                self.get_trd_amount(self.last_quote2['bid']-self.last_quote1['ask'], '1') #calculate trade amount
+                self.get_trd_amount(self.last_quote2_snap['bid']-self.last_quote1_snap['ask'], '1') #calculate trade amount
 
                 if self.trd_amount!=0: #if it is zero, then no need to trade
-
-                    last_quote1_snap=self.last_quote1
-                    last_quote2_snap=self.last_quote2
 
                     if self.trd_enabled==True:
                         fill_price=self.buy1sell2()
                     else:
-                        fill_price={'1' : self.last_quote1['ask'], '2': self.last_quote2['bid']}
+                        fill_price={'1' : self.last_quote1_snap['ask'], '2': self.last_quote2_snap['bid']}
 
                     if fill_price!=-1:
 
                         self.spread_open_act=fill_price['2']-fill_price['1']
                         self.current_amount+=self.trd_amount #relative to broker1
                         self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.00005
-                        self.bd_count+=1
                         self.trd_time+=1
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -372,44 +388,37 @@ class hft:
                         self.insert_trd_rec(trd_rec)
                         send_hotmail('Position opened ('+self.ccy+')', trd_rec, self.set_obj)
 
+
                         if self.spread_open_act<0:
                             self.num_neg_spread+=1
                             if self.num_neg_spread>=self.neg_tol:
-                                self.resume.clear()
-                                time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
-                                self.resume.set()
+                                self.safe_buffer_time = datetime.datetime.now()
                         else:
-                            self.resume.clear()
-                            time.sleep(self.trd_buffer) #halt trading temporarily after an order is placed
-                            self.resume.set()
+                            self.trd_buffer_time = datetime.datetime.now()
                             self.num_neg_spread=0
 
 
             elif  self.trd_time<=MAX_TRD_TIME \
                     and (trading_time.hour in self.trd_hour) \
-                    and (self.last_quote1['bid']-self.last_quote2['ask'])>=self.bd[(self.bd_count % 2)] \
-                    and (self.last_quote1['bid']-self.last_quote2['ask'])<UPPER_BOUND \
-                    and max(dt1.total_seconds(), dt2.total_seconds())<self.ping_limit \
+                    and (self.last_quote1_snap['bid']-self.last_quote2_snap['ask'])>=self.bd[0] \
+                    and abs(self.last_quote1_snap['bid']-self.last_quote2_snap['ask'])<self.bd[1] \
+                    and max(dt1.total_seconds(), dt2.total_seconds())<self.latency_limit \
                     and self.current_amount>-self.max_amount:
 
-                self.get_trd_amount(self.last_quote1['bid']-self.last_quote2['ask'], '2') #calculate trade amount
+                self.get_trd_amount(self.last_quote1_snap['bid']-self.last_quote2_snap['ask'], '2') #calculate trade amount
 
                 if self.trd_amount!=0: #if it is zero, then no need to trade
-
-                    last_quote1_snap=self.last_quote1
-                    last_quote2_snap=self.last_quote2
 
                     if self.trd_enabled==True:
                         fill_price=self.sell1buy2()
                     else:
-                        fill_price={'1' : self.last_quote1['bid'], '2': self.last_quote2['ask']}
+                        fill_price={'1' : self.last_quote1_snap['bid'], '2': self.last_quote2_snap['ask']}
 
                     if fill_price!=-1:
 
                         self.spread_open_act=fill_price['1']-fill_price['2']
                         self.current_amount-=self.trd_amount
                         self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.00005
-                        self.bd_count+=1
                         self.trd_time+=1
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -430,13 +439,10 @@ class hft:
                         if self.spread_open_act<0:
                             self.num_neg_spread+=1
                             if self.num_neg_spread>=self.neg_tol:
-                                self.resume.clear()
-                                time.sleep(self.safe_buffer) #halt trading temporarily if there are too many consecutive negative open spreads
-                                self.resume.set()
+
+                                self.safe_buffer_time=datetime.datetime.now()
                         else:
-                            self.resume.clear()
-                            time.sleep(self.trd_buffer) #halt trading temporarily after an order is placed
-                            self.resume.set()
+                            self.trd_buffer_time = datetime.datetime.now()
                             self.num_neg_spread=0
 
 
@@ -496,7 +502,7 @@ class set:
                 elif i==8:
                     self.single_amt=row[0]
                 elif i==9:
-                    self.ping_limit=row[0]
+                    self.latency_limit=row[0]
                 elif i==10:
                     self.max_loss=row[0]
                 i+=1
@@ -528,8 +534,8 @@ class set:
     def get_single_amount(self):
         return int(self.single_amt)
 
-    def get_ping_limit(self):
-        return int(self.ping_limit)
+    def get_latency_limit(self):
+        return int(self.latency_limit)
 
     def get_max_loss(self):
         return float(self.max_loss)
@@ -608,7 +614,7 @@ def send_hotmail(subject, content, set_obj):
     msg['Subject'] = subject
     msg['From'] = from_email['login']
     msg['To'] = to_email
-    mail=smtplib.SMTP('smtp.live.com',25)
+    mail=smtplib.SMTP('smtp.live.com',587)
     mail.ehlo()
     mail.starttls()
     mail.login(from_email['login'], from_email['pwd'])
@@ -617,8 +623,5 @@ def send_hotmail(subject, content, set_obj):
 
 
 def format_email_dict(content):
-    content_tmp=''
-    key_list=['datetime','ccy','amount','buysell','sprd_open','forex_quote','oanda_quote','fill_price','profit']
-    for item in key_list:
-        content_tmp+=str(item)+':'+str(content[item])+'\r\n'
-    return content_tmp
+
+    return json.dumps(content,indent=2)

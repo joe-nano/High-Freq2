@@ -234,7 +234,7 @@ class forexcom:
             conn = http.client.HTTPConnection('prodweb.efxnow.com',timeout=10)
             conn.request('POST', '/gaincapitalwebservices/authenticate/authenticationservice.asmx', self.req_soap_aut.format(appname=str(self.app),username=self.set_obj.get_account_id(), password=self.set_obj.get_account_pwd()), self.header_aut)
             resp = str(conn.getresponse().read())
-
+            print(resp)
             resp_dict=xml2dict(resp)['{http://schemas.xmlsoap.org/soap/envelope/}Body']['AuthenticateCredentialsResponse']['AuthenticationResult']
             if resp_dict['success']=='true':
                 print (self.broker_name+self.ccy+' '+'connection succeeded...')
