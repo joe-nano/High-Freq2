@@ -36,7 +36,7 @@ class Oanda:
             self.account_id=self.set_obj.get_account_num()
             self.token=self.set_obj.get_account_token()
             para={'timeout':30}
-            self.client = oandapyV20.API(access_token=self.token, environment='live', request_params=para)
+            self.client = oandapyV20.API(access_token=self.token, environment='live', request_params=para) #practice, live
             req_acct = accounts.AccountDetails(self.account_id)
             self.client.request(req_acct) #get account info
             print (self.broker_name+self.ccy+' '+'connection succeeded...')

@@ -1,91 +1,31 @@
-import http.client, urllib.parse
 import copy
-import xml.etree.ElementTree as ET
-import collections
 import math
 import csv
 import datetime
 import time
 import threading
 import smtplib
-from email.mime.text import MIMEText
-import socket
 import sys, os
 import json
-import oandapyV20
-from oandapyV20 import API
-import oandapyV20.endpoints.orders as orders
+import http.client, urllib.parse
+from email.mime.text import MIMEText
+
 import oandapyV20.endpoints.pricing as pricing
-import oandapyV20.endpoints.positions as positions
-import ast
-from forexcom import *
+from forexcomv2 import *
 from Oanda import *
 from pymysql import connect, err, sys, cursors
 import queue
 
-# Forex.com currency pair code
-ccy_dict={
-    'R1': 'EUR/USD',
-    'R2': 'GBP/USD',
-    'R3': 'USD/JPY',
-    'R5': 'EUR/JPY',
-    'R8': 'AUD/USD',
-    'R9': 'GBP/JPY',
-    'R10': 'EUR/CHF',
-    'R11': 'USD/CAD',
-    'R12': 'EUR/GBP',
-    'R13': 'USD/CHF',
-    'R14': 'USD/DKK',
-    'R15': 'AUD/JPY',
-    'R16': 'USD/HKD',
-    'R17': 'NZD/USD',
-    'R18': 'GBP/AUD',
-    'R19': 'EUR/AUD',
-    'R20': 'EUR/DKK',
-    'R21': 'CAD/JPY',
-    'R22': 'AUD/CAD',
-    'R23': 'EUR/CAD',
-    'R24': 'AUD/NZD',
-    'R25': 'GBP/CAD',
-    'R26': 'GBP/CHF',
-    'R27': 'NZD/JPY',
-    'R29': 'CHF/JPY',
-    'R30': 'EUR/NZD',
-    'R31': 'GBP/NZD',
-    'R32': 'USD/NOK',
-    'R33': 'USD/SEK',
-    'R34': 'USD/SGD',
-    'R35': 'AUD/CHF',
-    'R36': 'CAD/CHF',
-    'R37': 'EUR/NOK',
-    'R38': 'EUR/SEK',
-    'R39': 'NZD/CAD',
-    'R40': 'NZD/CHF',
-    'R43': 'SGD/JPY',
-    'R46': 'USD/MXN',
-    'R47': 'USD/ZAR',
-    'R66': 'USD/PLN',
-    'R67': 'EUR/PLN',
-    'R68': 'USD/TRY',
-    'R69': 'EUR/TRY',
-    'R70': 'USD/HUF',
-    'R71': 'EUR/HUF',
-    'R72': 'USD/CZK',
-    'R73': 'EUR/CZK',
-    'R74': 'ZAR/JPY',
-    'R107': 'USD/CNH'
-}
+from lightstreamer_client import LightstreamerClient
+from lightstreamer_client import LightstreamerSubscription
 
-MAX_TRD_TIME=3
-SPREAD_JPY=0.02
-SPREAD_NONE_JPY=0.00015
+MAX_TRD_TIME=10
 MAX_NEG_TRD=5
 SAFE_BUFFER=60
 TRD_BUFFER=60
 TRD_HOUR=range(0,24)
 TRD_RESET_HOUR=0
 UPPER_BOUND=1
-
 
 
 def get_boundary(ccy):
@@ -123,7 +63,7 @@ class hft:
         self.ccy=ccy #in XXX_YYY format
         self.locker=threading.Lock()
 
-        self.bd=(get_boundary(self.ccy),0.005)
+        self.bd=get_boundary(self.ccy)
         self.last_quote1={'ask':-999999,'bid':-999999}
         self.last_quote2={'ask':-1,'bid':-1}
         self.time_stamp1=datetime.datetime(2017, 1, 1, 0, 0, 0, 0)
@@ -147,10 +87,9 @@ class hft:
         self.trd_time=1
         self.current_amount=0
         self.profit=0
-        self.s=None
 
         self.check_position() #initialize is_open flag/open type, get current amount
-        self.connect_db()
+        self.connect_db(True) #<-- True=dev testing
 
     def connect_db(self, local=False):
 
@@ -200,38 +139,39 @@ class hft:
             print (self.stream_queue.get())
             self.stream_queue.task_done()
 
+    def quotesHandler(self, ls_data):
+        self.last_quote1['bid'] = float(ls_data['values']['Bid'])
+        self.last_quote1['ask'] = float(ls_data['values']['Offer'])
+        self.time_stamp1 = datetime.datetime.now()
+
+        if (self.time_stamp1 - self.trd_buffer_time).total_seconds() > self.trd_buffer and \
+                (self.time_stamp1 - self.safe_buffer_time).total_seconds() > self.safe_buffer:
+            self.locker.acquire()
+            self.execute()
+            self.locker.release()
+
+        self.stream_queue.put('Forexcom (' + self.ccy + ')' + ' ' + self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S") + ' ' + str(self.last_quote1))
+
     def trading(self, broker):
 
         try:
 
             if broker=='Forexcom':
 
-                self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.s.settimeout(30)
-                self.s.connect((self.broker1.rates_conn_info['IP'], int(self.broker1.rates_conn_info['Port'])))
-                self.s.sendall(bytes(self.broker1.token, 'utf-8'))
+                self.ls_client = LightstreamerClient(self.broker1.username, self.broker1.session_id,"https://push.cityindex.com", "STREAMINGALL")
 
+                try:
+                    self.ls_client.connect()
+                except Exception as e:
+                    print("Unable to connect to Lightstreamer Server", e)
 
+                subscription = LightstreamerSubscription(adapter="PRICES", mode="MERGE", items=["PRICE."+str(MKT_ID_LIST[o2f(self.ccy)])], fields=["Bid", "Offer"])
+                subscription.addlistener(self.quotesHandler)
+
+                self.ls_client.subscribe(subscription)
                 while True:
-                    data_tmp=self.s.recv(1024).decode("utf-8")
-                    ccy_list_tmp=data_tmp.split('\r')
-                    for ccy in ccy_list_tmp:
-                        ccy_live_list=ccy.split('\\')
-                        if ccy_live_list[0]!='' and ccy_dict[ccy_live_list[0]]==o2f(self.ccy): #not heartbeat
+                    None
 
-                            self.last_quote1['bid']=float(ccy_live_list[1])
-                            self.last_quote1['ask']=float(ccy_live_list[2])
-                            self.time_stamp1=datetime.datetime.now()
-
-                            if (self.time_stamp1-self.trd_buffer_time).total_seconds()>self.trd_buffer and \
-                                (self.time_stamp1-self.safe_buffer_time).total_seconds()>self.safe_buffer:
-                                self.locker.acquire()
-                                self.execute()
-                                self.locker.release()
-
-                            self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote1))
-
-                            #break
 
             elif broker=='Oanda':
 
@@ -265,11 +205,13 @@ class hft:
 
         except Exception as error:
 
+            self.locker.release() #if error before restart release any locker
+
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             print(exc_type, fname, exc_tb.tb_lineno)
             if broker == 'Forexcom':
-                self.s.close() #disconnect first
+                self.ls_client.disconnect() #disconnect first
                 self.broker1.connect()
                 self.trading('Forexcom')
             elif broker=='Oanda':
@@ -341,7 +283,6 @@ class hft:
     def execute(self):
         try:
             #ask=buy, bid=sell
-
             last_quote1_snap = copy.deepcopy(self.last_quote1)
             last_quote2_snap = copy.deepcopy(self.last_quote2)
 
@@ -351,25 +292,25 @@ class hft:
 
             if self.trd_time<=MAX_TRD_TIME \
                     and (trading_time.hour in self.trd_hour) \
-                    and (self.last_quote2_snap['bid']-self.last_quote1_snap['ask'])>=self.bd[0] \
-                    and abs(self.last_quote2_snap['bid']-self.last_quote1_snap['ask'])<self.bd[1] \
+                    and (last_quote2_snap['bid']-last_quote1_snap['ask'])>=self.bd[0] \
+                    and abs(last_quote2_snap['bid']-last_quote1_snap['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.latency_limit \
                     and self.current_amount<self.max_amount:
 
-                self.get_trd_amount(self.last_quote2_snap['bid']-self.last_quote1_snap['ask'], '1') #calculate trade amount
+                self.get_trd_amount(last_quote2_snap['bid']-last_quote1_snap['ask'], '1') #calculate trade amount
 
                 if self.trd_amount!=0: #if it is zero, then no need to trade
 
                     if self.trd_enabled==True:
                         fill_price=self.buy1sell2()
                     else:
-                        fill_price={'1' : self.last_quote1_snap['ask'], '2': self.last_quote2_snap['bid']}
+                        fill_price={'1' : last_quote1_snap['ask'], '2': last_quote2_snap['bid']}
 
                     if fill_price!=-1:
 
                         self.spread_open_act=fill_price['2']-fill_price['1']
                         self.current_amount+=self.trd_amount #relative to broker1
-                        self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.00005
+                        self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.000095
                         self.trd_time+=1
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -400,25 +341,25 @@ class hft:
 
             elif  self.trd_time<=MAX_TRD_TIME \
                     and (trading_time.hour in self.trd_hour) \
-                    and (self.last_quote1_snap['bid']-self.last_quote2_snap['ask'])>=self.bd[0] \
-                    and abs(self.last_quote1_snap['bid']-self.last_quote2_snap['ask'])<self.bd[1] \
+                    and (last_quote1_snap['bid']-last_quote2_snap['ask'])>=self.bd[0] \
+                    and abs(last_quote1_snap['bid']-last_quote2_snap['ask'])<self.bd[1] \
                     and max(dt1.total_seconds(), dt2.total_seconds())<self.latency_limit \
                     and self.current_amount>-self.max_amount:
 
-                self.get_trd_amount(self.last_quote1_snap['bid']-self.last_quote2_snap['ask'], '2') #calculate trade amount
+                self.get_trd_amount(last_quote1_snap['bid']-last_quote2_snap['ask'], '2') #calculate trade amount
 
                 if self.trd_amount!=0: #if it is zero, then no need to trade
 
                     if self.trd_enabled==True:
                         fill_price=self.sell1buy2()
                     else:
-                        fill_price={'1' : self.last_quote1_snap['bid'], '2': self.last_quote2_snap['ask']}
+                        fill_price={'1' : last_quote1_snap['bid'], '2': last_quote2_snap['ask']}
 
                     if fill_price!=-1:
 
                         self.spread_open_act=fill_price['1']-fill_price['2']
                         self.current_amount-=self.trd_amount
-                        self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.00005
+                        self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.000095
                         self.trd_time+=1
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -450,7 +391,7 @@ class hft:
             print (self.ccy, 'error encountered, error: '+str(error))
 
     def buy1sell2(self):
-        fill_price_buy=self.broker1.make_limit_order(self.trd_amount, 'B', self.last_quote1['ask'])
+        fill_price_buy=self.broker1.make_mkt_order(self.trd_amount, 'buy', self.last_quote1['ask'], self.last_quote1)
         if fill_price_buy>0:
             fill_price_sell=self.broker2.make_mkt_order(self.trd_amount, 'sell')
             if fill_price_sell>0:
@@ -463,7 +404,7 @@ class hft:
             return -1
 
     def sell1buy2(self):
-        fill_price_sell=self.broker1.make_limit_order(self.trd_amount, 'S', self.last_quote1['bid'])
+        fill_price_sell=self.broker1.make_mkt_order(self.trd_amount, 'sell', self.last_quote1['bid'], self.last_quote1)
         if fill_price_sell>0:
             fill_price_buy=self.broker2.make_mkt_order(self.trd_amount, 'buy')
             if fill_price_buy>0:
@@ -567,7 +508,7 @@ def monitor(set_obj, nav_path):
     print ('Monitor started...')
     broker1=forexcom('dummy', set_obj)
     broker2=Oanda('dummy', set_obj)
-    timer=5
+    timer=60*5
     time_cum=0
 
     init_nav=broker1.get_nav()+broker2.get_nav()
@@ -602,7 +543,7 @@ def monitor(set_obj, nav_path):
 
         except:
             time.sleep(5)
-            monitor(set_obj)
+            monitor(set_obj, nav_path)
 
 
 def send_hotmail(subject, content, set_obj):

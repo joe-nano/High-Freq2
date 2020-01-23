@@ -45,7 +45,7 @@ def main(args):
             print ('Total NAV='+str(oanda_nav+forexcom_nav), 'Forex.com NAV='+str(forexcom_nav), 'Oanda NAV='+str(oanda_nav))
             print ('Forex position= '+str(broker1.get_position()))
             print ('Oanda position= '+str(broker2.get_position()))
-            time.sleep(10)
+            time.sleep(30)
 
 if __name__=='__main__':
     sys.exit(main(sys.argv))

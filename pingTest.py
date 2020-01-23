@@ -5,7 +5,8 @@ import time
 
 def main(args):
 
-    hostname = {'api-fxtrade.oanda.com':'oanda'}
+    hostname = {'api-fxtrade.oanda.com':'oanda',
+                'ciapi.cityindex.com': 'forex'}
 
     for host in hostname.keys():
 
