@@ -89,7 +89,7 @@ class hft:
         self.profit=0
 
         self.check_position() #initialize is_open flag/open type, get current amount
-        self.connect_db(True) #<-- True=dev testing
+        self.connect_db() #<-- True=dev testing
 
     def connect_db(self, local=False):
 
