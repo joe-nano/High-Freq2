@@ -391,7 +391,7 @@ class hft:
             print (self.ccy, 'error encountered, error: '+str(error))
 
     def buy1sell2(self):
-        fill_price_buy=self.broker1.make_mkt_order(self.trd_amount, 'buy', self.last_quote1['ask'], self.last_quote1)
+        fill_price_buy=self.broker1.make_mkt_order(self.trd_amount, 'buy', self.last_quote1)
         if fill_price_buy>0:
             fill_price_sell=self.broker2.make_mkt_order(self.trd_amount, 'sell')
             if fill_price_sell>0:
@@ -404,7 +404,7 @@ class hft:
             return -1
 
     def sell1buy2(self):
-        fill_price_sell=self.broker1.make_mkt_order(self.trd_amount, 'sell', self.last_quote1['bid'], self.last_quote1)
+        fill_price_sell=self.broker1.make_mkt_order(self.trd_amount, 'sell', self.last_quote1)
         if fill_price_sell>0:
             fill_price_buy=self.broker2.make_mkt_order(self.trd_amount, 'buy')
             if fill_price_buy>0:
