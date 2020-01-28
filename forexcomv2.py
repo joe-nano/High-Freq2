@@ -16,21 +16,6 @@ import random
 import requests
 from hftUtil import *
 
-'''
-#Dev
-MKT_ID_LIST={'EUR/USD':401484347,
-             'GBP/USD':401484392,
-             'USD/JPY':401484414,
-             'AUD/USD':401484317,
-             'dummy':-1}
-'''
-
-#Prod
-MKT_ID_LIST={'EUR/USD':401501530,
-             'USD/JPY':401501592,
-             'GBP/USD':401501544,
-             'AUD/USD':401501499,
-             'dummy':-1}
 
 class forexcom:
 
@@ -44,13 +29,16 @@ class forexcom:
         self.password = self.set_obj.get_account_pwd()
 
         self.session_id=None
-        self.market_id=MKT_ID_LIST[self.ccy]
         self.trading_acct_id=402444865 #dev:402448418, #prod: 402444865
 
         self.base_url='https://ciapi.cityindex.com/TradingAPI/'
-        #self.base_url='https://ciapipreprod.cityindextest9.co.uk/TradingAPI/'
-
         self.connect()
+
+        #initialize
+        if self.ccy=='dummy':
+            self.market_id=-1
+        else:
+            self.market_id=self.get_market_info(self.ccy)['MarketId']
 
     def send_request(self, method, api_url, payload):
 
@@ -107,18 +95,17 @@ class forexcom:
 
     def get_last_price(self):
 
-        resp = self.send_request('GET', 'market/'+str(MKT_ID_LIST[self.ccy])+'/tickhistory?PriceTicks=1',{})
+        resp = self.send_request('GET', 'market/'+str(self.market_id)+'/tickhistory?PriceTicks=1',{})
 
         return resp['PriceTicks'][0]['Price']
 
     def get_market_info(self, ccy):
 
-        resp = self.send_request('GET', 'market/fullsearchwithtags', {'query':ccy, 'maxResults':200})
+        resp = self.send_request('GET', 'market/fullsearchwithtags?SearchByMarketName=TRUE&TagId=80&MaxResults=10&Query='+ccy, {})
 
         for mktInfo in resp['MarketInformation']:
-            print(mktInfo['Name'])
-            if mktInfo['Name']==ccy:
 
+            if mktInfo['Name']==ccy:
                 return mktInfo
 
     def make_limit_order(self, amount, side, prc, last_price):

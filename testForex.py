@@ -8,7 +8,7 @@ def main(args):
     login_file='login_info_hft.csv'
     set_obj=set(login_file)
 
-    forexTrader=forexcom('GBP/USD', set_obj)
+    forexTrader=forexcom('EUR/JPY', set_obj)
 
     #lastPx=forexTrader.get_last_price()
 
@@ -19,7 +19,7 @@ def main(args):
 
     #print(forexTrader.make_mkt_order(15000, 'buy', last_price))
 
-    print(forexTrader.close_position())
+    print(forexTrader.get_market_info('USD/DKK'))
 
 
 if __name__=='__main__':

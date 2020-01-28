@@ -23,6 +23,7 @@ MAX_TRD_TIME=10
 MAX_NEG_TRD=5
 SAFE_BUFFER=60
 TRD_BUFFER=60
+CNNT_STALE=60
 TRD_HOUR=range(0,24)
 TRD_RESET_HOUR=0
 UPPER_BOUND=1
@@ -32,11 +33,11 @@ def get_boundary(ccy):
 
     if 'JPY' in ccy:
         scal=100.0
-        lb=1.5
+        lb=1.0
         ub=scal
     else:
         scal=10000.0
-        lb=1.5
+        lb=1.0
         ub=scal
     return (lb/scal, ub/scal, scal)
 
@@ -150,6 +151,11 @@ class hft:
             self.execute()
             self.locker.release()
 
+        if (datetime.datetime.now() - self.time_stamp2).total_seconds() > CNNT_STALE and \
+                abs((datetime.datetime.now()-self.time_stamp2).total_seconds())<1000:  # connection stale for 60 seconds
+            self.broker2.connect()
+            self.trading('Oanda')
+
         self.stream_queue.put('Forexcom (' + self.ccy + ')' + ' ' + self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S") + ' ' + str(self.last_quote1))
 
     def trading(self, broker):
@@ -165,7 +171,7 @@ class hft:
                 except Exception as e:
                     print("Unable to connect to Lightstreamer Server", e)
 
-                subscription = LightstreamerSubscription(adapter="PRICES", mode="MERGE", items=["PRICE."+str(MKT_ID_LIST[o2f(self.ccy)])], fields=["Bid", "Offer"])
+                subscription = LightstreamerSubscription(adapter="PRICES", mode="MERGE", items=["PRICE."+str(self.broker1.market_id)], fields=["Bid", "Offer"])
                 subscription.addlistener(self.quotesHandler)
 
                 self.ls_client.subscribe(subscription)
@@ -195,6 +201,12 @@ class hft:
                             self.locker.acquire()
                             self.execute()
                             self.locker.release()
+
+                        if (datetime.datetime.now()-self.time_stamp1).total_seconds()>CNNT_STALE and \
+                                abs((datetime.datetime.now()-self.time_stamp1).total_seconds())<1000: #connection stale for 60 seconds
+                            self.ls_client.disconnect()  # disconnect first
+                            self.broker1.connect()
+                            self.trading('Forexcom')
 
                         self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
 
@@ -308,9 +320,13 @@ class hft:
 
                     if fill_price!=-1:
 
-                        self.spread_open_act=fill_price['2']-fill_price['1']
+                        if self.ccy[-3:]=='USD':
+                            self.spread_open_act=fill_price['2']-fill_price['1']
+                        else:
+                            self.spread_open_act=(fill_price['2']-fill_price['1'])/((fill_price['1'] + fill_price['2']) / 2)
+
                         self.current_amount+=self.trd_amount #relative to broker1
-                        self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.000095
+                        self.profit=self.spread_open_act*self.trd_amount-self.trd_amount*0.000095
                         self.trd_time+=1
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -357,9 +373,12 @@ class hft:
 
                     if fill_price!=-1:
 
-                        self.spread_open_act=fill_price['1']-fill_price['2']
+                        if self.ccy[-3:]=='USD':
+                            self.spread_open_act=fill_price['1']-fill_price['2']
+                        else:
+                            self.spread_open_act=(fill_price['1']-fill_price['2'])/((fill_price['1'] + fill_price['2']) / 2)
                         self.current_amount-=self.trd_amount
-                        self.profit=self.spread_open_act*self.trd_amount/((fill_price['1']+fill_price['2'])/2)-self.trd_amount*0.000095
+                        self.profit=self.spread_open_act*self.trd_amount-self.trd_amount*0.000095
                         self.trd_time+=1
 
                         time_now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
