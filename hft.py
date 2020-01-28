@@ -23,7 +23,7 @@ MAX_TRD_TIME=10
 MAX_NEG_TRD=5
 SAFE_BUFFER=60
 TRD_BUFFER=60
-CNNT_STALE=60
+CNNT_STALE=5*60
 TRD_HOUR=range(0,24)
 TRD_RESET_HOUR=0
 UPPER_BOUND=1
@@ -151,11 +151,6 @@ class hft:
             self.execute()
             self.locker.release()
 
-        if (datetime.datetime.now() - self.time_stamp2).total_seconds() > CNNT_STALE and \
-                abs((datetime.datetime.now()-self.time_stamp2).total_seconds())<1000:  # connection stale for 60 seconds
-            self.broker2.connect()
-            self.trading('Oanda')
-
         self.stream_queue.put('Forexcom (' + self.ccy + ')' + ' ' + self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S") + ' ' + str(self.last_quote1))
 
     def trading(self, broker):
@@ -202,12 +197,6 @@ class hft:
                             self.execute()
                             self.locker.release()
 
-                        if (datetime.datetime.now()-self.time_stamp1).total_seconds()>CNNT_STALE and \
-                                abs((datetime.datetime.now()-self.time_stamp1).total_seconds())<1000: #connection stale for 60 seconds
-                            self.ls_client.disconnect()  # disconnect first
-                            self.broker1.connect()
-                            self.trading('Forexcom')
-
                         self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
 
             else:
@@ -216,8 +205,6 @@ class hft:
                 return None
 
         except Exception as error:
-
-            self.locker.release() #if error before restart release any locker
 
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]

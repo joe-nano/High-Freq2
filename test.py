@@ -31,9 +31,7 @@ def main(args):
 
     sub_key = lightstreamer_client.subscribe(subscription)
 
-    while True:
-
-        None
+    lightstreamer_client.disconnect()
 
 
 
