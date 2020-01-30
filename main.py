@@ -25,7 +25,7 @@ def main(args):
         threads.append(threading.Thread(target=monitor,args=[set_obj, nav_file])) #check if nav drops too much
 
         for hft_obj in hft_list:
-            threads.append(threading.Thread(target=hft_obj.start(),args=None))
+            threads.append(threading.Thread(target=hft_obj.start,args=[]))
 
         for thread in threads:
             thread.start()

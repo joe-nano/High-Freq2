@@ -23,7 +23,7 @@ MAX_TRD_TIME=10
 MAX_NEG_TRD=5
 SAFE_BUFFER=60
 TRD_BUFFER=60
-CNNT_STALE=5*60
+RESTART_TIME=3600
 TRD_HOUR=range(0,24)
 TRD_RESET_HOUR=0
 UPPER_BOUND=1
@@ -63,6 +63,7 @@ class hft:
 
         self.ccy=ccy #in XXX_YYY format
         self.locker=threading.Lock()
+        self.run=True
 
         self.bd=get_boundary(self.ccy)
         self.last_quote1={'ask':-999999,'bid':-999999}
@@ -150,7 +151,6 @@ class hft:
             self.locker.acquire()
             self.execute()
             self.locker.release()
-
         self.stream_queue.put('Forexcom (' + self.ccy + ')' + ' ' + self.time_stamp1.strftime("%Y-%m-%d %H:%M:%S") + ' ' + str(self.last_quote1))
 
     def trading(self, broker):
@@ -170,8 +170,11 @@ class hft:
                 subscription.addlistener(self.quotesHandler)
 
                 self.ls_client.subscribe(subscription)
+
                 while True:
-                    None
+                    if self.run==False:
+                        self.ls_client.disconnect()
+                        return None
 
 
             elif broker=='Oanda':
@@ -183,21 +186,25 @@ class hft:
                 req = pricing.PricingStream(accountID=self.broker2.account_id, params=params)
                 resp_stream = self.broker2.client.request(req)
                 for ticks in resp_stream:
-                    if ticks['type']!='HEARTBEAT':
+                    if self.run==True:
 
-                        self.last_quote2['bid']=float(ticks['bids'][0]['price'])
-                        self.last_quote2['ask']=float(ticks['asks'][0]['price'])
-                        self.time_stamp2=datetime.datetime.now()
-                        if self.time_stamp2.hour==TRD_RESET_HOUR: #reset daily trade limit
-                            self.trd_time=0
+                        if ticks['type']!='HEARTBEAT':
 
-                        if (self.time_stamp2-self.trd_buffer_time).total_seconds()>self.trd_buffer and \
-                                (self.time_stamp2-self.safe_buffer_time).total_seconds()>self.safe_buffer: #only call execute when resume==True
-                            self.locker.acquire()
-                            self.execute()
-                            self.locker.release()
+                            self.last_quote2['bid']=float(ticks['bids'][0]['price'])
+                            self.last_quote2['ask']=float(ticks['asks'][0]['price'])
+                            self.time_stamp2=datetime.datetime.now()
+                            if self.time_stamp2.hour==TRD_RESET_HOUR: #reset daily trade limit
+                                self.trd_time=0
 
-                        self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
+                            if (self.time_stamp2-self.trd_buffer_time).total_seconds()>self.trd_buffer and \
+                                    (self.time_stamp2-self.safe_buffer_time).total_seconds()>self.safe_buffer: #only call execute when resume==True
+                                self.locker.acquire()
+                                self.execute()
+                                self.locker.release()
+
+                            self.stream_queue.put(broker+'('+self.ccy+')'+' '+self.time_stamp2.strftime("%Y-%m-%d %H:%M:%S")+' '+str(self.last_quote2))
+                    else:
+                        return None
 
             else:
 
@@ -206,23 +213,28 @@ class hft:
 
         except Exception as error:
 
+            try:
+                self.locker.release()
+            except Exception as lckErr:
+                None
+
             exc_type, exc_obj, exc_tb = sys.exc_info()
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             print(exc_type, fname, exc_tb.tb_lineno)
             if broker == 'Forexcom':
                 self.ls_client.disconnect() #disconnect first
                 self.broker1.connect()
-                self.trading('Forexcom')
             elif broker=='Oanda':
                 self.broker2.connect()
-                self.trading('Oanda')
 
             print(str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")) +' '+ broker + ' trading failed: ' + str(error))
             print('restarting '+broker+' ...')
             time.sleep(30)
             self.trading(broker)
 
+    '''
     def start(self):
+        
         try:
             print (self.ccy+' started...')
             threads=[]
@@ -237,6 +249,33 @@ class hft:
             print (self.ccy, 'error encounter in trading, restarting...')
             time.sleep(5)
             self.start()
+    
+    '''
+    def start(self):
+
+        print(self.ccy + ' started...')
+        printThread=threading.Thread(target=self.print_stream, args=[])
+        printThread.start()
+
+        while True:
+
+            self.run=True
+
+            threads=[]
+            threads.append(threading.Thread(target=self.trading,args=['Forexcom']))
+            threads.append(threading.Thread(target=self.trading,args=['Oanda']))
+
+            for thread in threads:
+                thread.start()
+
+            time.sleep(RESTART_TIME)
+
+            self.run=False
+
+            for thread in threads:
+                thread.join()
+
+            print(datetime.datetime.now(), self.ccy+' scheduled restarting...')
 
 
     def close_position(self):
