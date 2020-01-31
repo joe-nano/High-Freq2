@@ -170,7 +170,7 @@ class forexcom:
                    "MarketName": self.ccy,
                    "Status": None,
                    "isTrade": True,
-                   "PriceTolerance":0,
+                   "PriceTolerance":100,
                    }
 
         resp = self.send_request('POST', 'order/newtradeorder', payload)

@@ -84,6 +84,48 @@ class Oanda:
             print ("order not executed "+str(err))
             return -1
 
+    def make_fok_order(self, amount, side, price): #fill or kill order
+
+        order=None
+        if side=='buy':
+
+            order={
+                    "order": {
+                    "timeInForce": "FOK",
+                    "instrument": self.ccy,
+                    "units": str(amount),
+                    "type": "LIMIT",
+                    "positionFill": "DEFAULT",
+                    "price" : str(price)
+                    }
+                }
+
+        elif side=='sell':
+
+
+            order={
+                    "order": {
+                    "timeInForce": "FOK",
+                    "instrument": self.ccy,
+                    "units": str(-amount),
+                    "type": "LIMIT",
+                    "positionFill": "DEFAULT",
+                    "price" : str(price)
+                    }
+                }
+
+        try:
+            req = orders.OrderCreate(self.account_id, data=order)
+            resp_order=self.client.request(req)
+
+            self.latest_price=float(resp_order['orderFillTransaction']['price'])
+            return float(resp_order['orderFillTransaction']['price'])
+
+        except Exception as err:
+
+            print ("order not executed "+str(err))
+            return -1
+
 
 
     def close_position(self):

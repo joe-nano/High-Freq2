@@ -435,6 +435,34 @@ class hft:
         except Exception as error:
             print (self.ccy, 'error encountered, error: '+str(error))
 
+
+    def buy1sell2(self):
+        fill_price_sell = self.broker2.make_fok_order(self.trd_amount, 'sell', self.last_quote2['bid'])
+        if fill_price_sell>0:
+            fill_price_buy = self.broker1.make_mkt_order(self.trd_amount, 'buy', self.last_quote1)
+            if fill_price_buy>0:
+                return {'1' : fill_price_buy, '2': fill_price_sell}
+            else:
+                self.close_position()
+                send_hotmail('Execution error ('+self.ccy+'):', {'msg':'Oanda not executed'}, self.set_obj)
+                return -1
+        else:
+            return -1
+
+    def sell1buy2(self):
+        fill_price_buy = self.broker2.make_fok_order(self.trd_amount, 'buy', self.last_quote2['ask'])
+        if fill_price_buy>0:
+            fill_price_sell = self.broker1.make_mkt_order(self.trd_amount, 'sell', self.last_quote1)
+            if fill_price_sell>0:
+                return {'1' : fill_price_sell, '2': fill_price_buy}
+            else:
+                self.close_position()
+                send_hotmail('Execution error ('+self.ccy+'):', {'msg':'Oanda not executed'}, self.set_obj)
+                return -1
+        else:
+            return -1
+
+    '''
     def buy1sell2(self):
         fill_price_buy=self.broker1.make_mkt_order(self.trd_amount, 'buy', self.last_quote1)
         if fill_price_buy>0:
@@ -460,7 +488,7 @@ class hft:
                 return -1
         else:
             return -1
-
+    '''
 
 
 class set:
