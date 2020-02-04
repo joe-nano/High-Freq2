@@ -435,7 +435,30 @@ class hft:
         except Exception as error:
             print (self.ccy, 'error encountered, error: '+str(error))
 
+    def buy1sell2(self):
 
+        threads_trd = []
+        threads_trd.append(threading.Thread(target=self.broker1.make_mkt_order, args=[self.trd_amount, 'buy', self.last_quote1]))
+        threads_trd.append(threading.Thread(target=self.broker2.make_mkt_order, args=[self.trd_amount, 'sell']))
+
+        for thread in threads_trd:
+            thread.start()
+
+        return {'1': self.last_quote1['ask'], '2': self.last_quote2['sell']}
+
+
+    def sell1buy2(self):
+
+        threads_trd = []
+        threads_trd.append(threading.Thread(target=self.broker1.make_mkt_order, args=[self.trd_amount, 'sell', self.last_quote1]))
+        threads_trd.append(threading.Thread(target=self.broker2.make_mkt_order, args=[self.trd_amount, 'buy']))
+
+        for thread in threads_trd:
+            thread.start()
+
+        return {'1': self.last_quote1['bid'], '2': self.last_quote2['ask']}
+
+    '''
     def buy1sell2(self):
         fill_price_sell = self.broker2.make_fok_order(self.trd_amount, 'sell', self.last_quote2['bid'])
         if fill_price_sell>0:
@@ -462,6 +485,7 @@ class hft:
         else:
             return -1
 
+    '''
     '''
     def buy1sell2(self):
         fill_price_buy=self.broker1.make_mkt_order(self.trd_amount, 'buy', self.last_quote1)
