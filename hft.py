@@ -19,7 +19,7 @@ import queue
 from lightstreamer_client import LightstreamerClient
 from lightstreamer_client import LightstreamerSubscription
 
-MAX_TRD_TIME=10
+MAX_TRD_TIME=1000
 MAX_NEG_TRD=5
 SAFE_BUFFER=60
 TRD_BUFFER=60
